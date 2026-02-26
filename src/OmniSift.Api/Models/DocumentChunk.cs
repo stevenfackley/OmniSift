@@ -1,0 +1,60 @@
+// ============================================================
+// OmniSift.Api — DocumentChunk Entity
+// Stores text chunks with vector embeddings for semantic search
+// ============================================================
+
+using Pgvector;
+
+namespace OmniSift.Api.Models;
+
+/// <summary>
+/// An individual text chunk extracted from a data source,
+/// with a vector embedding for semantic similarity search.
+/// </summary>
+public sealed class DocumentChunk
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>
+    /// Foreign key to the owning tenant. Required for RLS.
+    /// </summary>
+    public Guid TenantId { get; set; }
+
+    /// <summary>
+    /// Foreign key to the parent data source.
+    /// </summary>
+    public Guid DataSourceId { get; set; }
+
+    /// <summary>
+    /// The text content of this chunk.
+    /// </summary>
+    public string Content { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Sequential index of this chunk within the data source (0-based).
+    /// </summary>
+    public int ChunkIndex { get; set; }
+
+    /// <summary>
+    /// Approximate token count of this chunk.
+    /// </summary>
+    public int TokenCount { get; set; }
+
+    /// <summary>
+    /// Vector embedding (3072 dimensions for text-embedding-3-large).
+    /// Null until embedding is generated.
+    /// </summary>
+    public Vector? Embedding { get; set; }
+
+    /// <summary>
+    /// Flexible metadata stored as JSONB (e.g., page number, timestamp).
+    /// </summary>
+    public Dictionary<string, object> Metadata { get; set; } = [];
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // Navigation properties
+    public Tenant Tenant { get; set; } = null!;
+    public DataSource DataSource { get; set; } = null!;
+}

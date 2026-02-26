@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  # ──────────────────────────────────────────────
+  # PostgreSQL with pgvector extension
+  # ──────────────────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: omnisift-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-omnisift}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omnisift_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-omnisift}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-omnisift} -d ${POSTGRES_DB:-omnisift}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ──────────────────────────────────────────────
+  # ASP.NET Core Web API (Backend)
+  # ──────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: src/OmniSift.Api/Dockerfile
+    container_name: omnisift-api
+    restart: unless-stopped
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      # Use the omnisift_app role (not the superuser) so RLS policies are enforced.
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-omnisift};Username=omnisift_app;Password=${POSTGRES_PASSWORD:-omnisift_dev}"
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
+      OpenAI__ApiKey: ${OPENAI_API_KEY:-}
+      Tavily__ApiKey: ${TAVILY_API_KEY:-}
+      Jwt__Secret: ${JWT_SECRET:-default_dev_secret_change_in_production_32chars}
+      Jwt__Issuer: ${JWT_ISSUER:-https://omnisift.local}
+      Jwt__Audience: ${JWT_AUDIENCE:-omnisift-api}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────
+  # Blazor WebAssembly Frontend
+  # ──────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: src/OmniSift.Web/Dockerfile
+    container_name: omnisift-web
+    restart: unless-stopped
+    ports:
+      - "5080:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+    driver: local

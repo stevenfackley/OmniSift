@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Entity Framework Core + PostgreSQL -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0-preview.2.25163.8" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0-preview.2" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.2.0" />
+    <PackageReference Include="Pgvector" Version="0.3.0" />
+
+    <!-- Microsoft Semantic Kernel -->
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.72.0" />
+
+    <!-- Document Parsing -->
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.67" />
+
+    <!-- OpenAPI / Swagger -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OmniSift.Shared\OmniSift.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

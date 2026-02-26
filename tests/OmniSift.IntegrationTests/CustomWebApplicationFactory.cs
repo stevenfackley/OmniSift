@@ -1,0 +1,139 @@
+// ============================================================
+// Integration Tests — Custom WebApplicationFactory
+// Configures in-memory database and mocked services for testing
+// ============================================================
+
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.SemanticKernel;
+using Moq;
+using OmniSift.Api.Data;
+using OmniSift.Api.Models;
+using OmniSift.Api.Services;
+using Pgvector;
+
+namespace OmniSift.IntegrationTests;
+
+/// <summary>
+/// Custom WebApplicationFactory that replaces PostgreSQL with an in-memory
+/// database and mocks external services (embedding, LLM).
+/// </summary>
+public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
+{
+    /// <summary>
+    /// Dev tenant ID used in tests (matches db/init.sql seed).
+    /// </summary>
+    public static readonly Guid TestTenantId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Testing");
+
+        builder.ConfigureServices(services =>
+        {
+            // Replace PostgreSQL with InMemory for integration tests.
+            // EF Core 10+ does not allow multiple database providers, so we must
+            // remove ALL EF/DbContext/Npgsql related services and re-register cleanly.
+            // This includes internal IDbContextOptionsConfiguration<T> registrations.
+            var descriptorsToRemove = services.Where(d =>
+            {
+                var stName = d.ServiceType.FullName ?? string.Empty;
+                var stAssembly = d.ServiceType.Assembly.GetName().Name ?? string.Empty;
+                var itName = d.ImplementationType?.FullName ?? string.Empty;
+                var itAssembly = d.ImplementationType?.Assembly.GetName().Name ?? string.Empty;
+
+                return stName.Contains("OmniSiftDbContext")
+                    || stName.Contains("DbContextOptions")
+                    || stName.Contains("IDbContextOptionsConfiguration")
+                    || stAssembly.Contains("Npgsql")
+                    || itAssembly.Contains("Npgsql")
+                    || stAssembly.Contains("EntityFrameworkCore.Relational")
+                    || itAssembly.Contains("EntityFrameworkCore.Relational");
+            }).ToList();
+
+            foreach (var descriptor in descriptorsToRemove)
+                services.Remove(descriptor);
+
+            // Re-register with InMemory only.
+            // Use a factory registration so we can customize model creation
+            // to ignore the Vector property (unsupported by InMemory).
+            var dbName = "OmniSift_IntegrationTests_" + Guid.NewGuid();
+            services.AddDbContext<OmniSiftDbContext>(
+                options => options.UseInMemoryDatabase(dbName),
+                contextLifetime: ServiceLifetime.Scoped,
+                optionsLifetime: ServiceLifetime.Singleton);
+
+            // Replace the DbContext registration with our test subclass
+            // that ignores the Pgvector Vector column (InMemory doesn't support it).
+            services.AddScoped<OmniSiftDbContext>(sp =>
+                new InMemoryOmniSiftDbContext(
+                    sp.GetRequiredService<DbContextOptions<OmniSiftDbContext>>()));
+
+            // Replace embedding service with a mock that returns dummy vectors
+            services.RemoveAll<IEmbeddingService>();
+            var embeddingMock = new Mock<IEmbeddingService>();
+            embeddingMock
+                .Setup(e => e.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Vector(new float[3072]));
+            embeddingMock
+                .Setup(e => e.GenerateEmbeddingsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IEnumerable<string> texts, CancellationToken _) =>
+                    texts.Select(_ => new Vector(new float[3072])).ToList());
+            services.AddSingleton(embeddingMock.Object);
+
+            // Replace Semantic Kernel with a simple empty kernel (no LLM)
+            services.RemoveAll<Func<Kernel>>();
+            services.RemoveAll<Kernel>();
+            services.AddSingleton<Func<Kernel>>(_ => () => Kernel.CreateBuilder().Build());
+            services.AddScoped(_ => Kernel.CreateBuilder().Build());
+
+            // Seed the test database
+            var sp = services.BuildServiceProvider();
+            using var scope = sp.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<OmniSiftDbContext>();
+            db.Database.EnsureCreated();
+
+            // Add test tenant
+            if (!db.Tenants.Any(t => t.Id == TestTenantId))
+            {
+                db.Tenants.Add(new Api.Models.Tenant
+                {
+                    Id = TestTenantId,
+                    Name = "Test Tenant",
+                    Slug = "test",
+                    IsActive = true
+                });
+                db.SaveChanges();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Creates an HttpClient pre-configured with the test tenant header.
+    /// </summary>
+    public HttpClient CreateTenantClient()
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-Id", TestTenantId.ToString());
+        return client;
+    }
+
+    /// <summary>
+    /// DbContext subclass that ignores the Pgvector Vector property
+    /// since InMemory provider cannot map that type.
+    /// </summary>
+    private sealed class InMemoryOmniSiftDbContext : OmniSiftDbContext
+    {
+        public InMemoryOmniSiftDbContext(DbContextOptions<OmniSiftDbContext> options)
+            : base(options) { }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<DocumentChunk>().Ignore(e => e.Embedding);
+        }
+    }
+}

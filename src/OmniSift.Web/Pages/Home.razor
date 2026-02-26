@@ -1,0 +1,75 @@
+@page "/"
+
+<PageTitle>OmniSift — Home</PageTitle>
+
+<div class="page-header">
+    <h1>Welcome to OmniSift</h1>
+</div>
+
+<div style="margin-top: 1.5rem;">
+    <div class="card">
+        <div class="card-title">🔍 AI-Powered Research Agent</div>
+        <p>
+            OmniSift is a multi-tenant AI research platform that helps you analyze documents,
+            search the web, and explore archived content — all through an intelligent agent
+            powered by Semantic Kernel.
+        </p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+        <div class="card">
+            <div class="card-title">📁 Upload Documents</div>
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                Upload PDFs, SMS exports (CSV/JSON), or HTML files. OmniSift extracts text,
+                chunks it, and generates vector embeddings for semantic search.
+            </p>
+            <a href="datasources" class="btn btn-outline">Manage Data Sources</a>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🤖 Ask the Agent</div>
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                Query your documents using natural language. The agent searches your uploaded
+                data, the web, and the Wayback Machine to find answers.
+            </p>
+            <a href="agent" class="btn btn-primary">Start Researching</a>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🌐 Web & Archive Search</div>
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                The agent can search the live web via Tavily and check the Internet Archive's
+                Wayback Machine for historical page snapshots.
+            </p>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-title">⚡ System Status</div>
+        @if (_checking)
+        {
+            <p style="color: var(--text-muted);">Checking API health...</p>
+        }
+        else if (_healthy)
+        {
+            <div class="alert alert-success">✅ API is healthy and connected.</div>
+        }
+        else
+        {
+            <div class="alert alert-error">❌ API is unreachable. Ensure the backend is running on port 5000.</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject] private OmniSiftApiClient Api { get; set; } = default!;
+
+    private bool _checking = true;
+    private bool _healthy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _healthy = await Api.CheckHealthAsync();
+        _checking = false;
+    }
+}

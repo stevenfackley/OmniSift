@@ -1,0 +1,272 @@
+@page "/datasources"
+
+<PageTitle>OmniSift — Data Sources</PageTitle>
+
+<div class="page-header">
+    <h1>📁 Data Sources</h1>
+</div>
+
+<div style="margin-top: 1.5rem;">
+    @* ── Upload Section ──────────────────────────────────── *@
+    <div class="card">
+        <div class="card-title">Upload File</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div>
+                <InputFile OnChange="HandleFileSelected" class="form-input"
+                           accept=".pdf,.csv,.json,.html,.htm"
+                           disabled="@_uploading" />
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem;">
+                    Supported: PDF, CSV (SMS), JSON (SMS), HTML — Max 50 MB
+                </p>
+                @if (_selectedFile is not null)
+                {
+                    <button class="btn btn-primary" style="margin-top: 0.75rem;"
+                            @onclick="UploadFile" disabled="@_uploading">
+                        @if (_uploading)
+                        {
+                            <span class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></span>
+                            <span>Uploading...</span>
+                        }
+                        else
+                        {
+                            <span>Upload @_selectedFile.Name</span>
+                        }
+                    </button>
+                }
+            </div>
+
+            <div>
+                <div class="form-group">
+                    <label class="form-label">Or ingest a web page URL:</label>
+                    <input class="form-input" @bind="_webUrl" placeholder="https://example.com/page"
+                           disabled="@_uploading" />
+                </div>
+                <button class="btn btn-outline" @onclick="IngestWeb"
+                        disabled="@(_uploading || string.IsNullOrWhiteSpace(_webUrl))">
+                    Ingest Web Page
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_uploadMessage))
+        {
+            <div class="alert @(_uploadSuccess ? "alert-success" : "alert-error")" style="margin-top: 1rem;">
+                @_uploadMessage
+            </div>
+        }
+    </div>
+
+    @* ── Data Source List ─────────────────────────────────── *@
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <div class="card-title" style="margin-bottom: 0;">Your Data Sources</div>
+            <button class="btn btn-outline btn-sm" @onclick="LoadDataSources" disabled="@_loading">
+                🔄 Refresh
+            </button>
+        </div>
+
+        @if (_loading)
+        {
+            <p style="color: var(--text-muted);">Loading data sources...</p>
+        }
+        else if (_dataSources.Count == 0)
+        {
+            <p style="color: var(--text-muted);">No data sources yet. Upload a file or ingest a web page to get started.</p>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Name / URL</th>
+                        <th>Status</th>
+                        <th>Chunks</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var source in _dataSources)
+                    {
+                        <tr>
+                            <td>
+                                @switch (source.SourceType)
+                                {
+                                    case "pdf": <span>📄 PDF</span> break;
+                                    case "sms": <span>💬 SMS</span> break;
+                                    case "web": <span>🌐 Web</span> break;
+                                    default: <span>📎 @source.SourceType</span> break;
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(source.FileName))
+                                {
+                                    @source.FileName
+                                }
+                                else if (!string.IsNullOrWhiteSpace(source.OriginalUrl))
+                                {
+                                    <span style="font-size: 0.85rem;">@TruncateUrl(source.OriginalUrl)</span>
+                                }
+                                else
+                                {
+                                    <span style="color: var(--text-muted);">—</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge badge-@source.Status">@source.Status</span>
+                                @if (!string.IsNullOrWhiteSpace(source.ErrorMessage))
+                                {
+                                    <span style="font-size: 0.75rem; color: var(--danger); display: block;">
+                                        @source.ErrorMessage
+                                    </span>
+                                }
+                            </td>
+                            <td>@source.ChunkCount</td>
+                            <td style="font-size: 0.85rem;">@source.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>
+                                <button class="btn btn-danger btn-sm"
+                                        @onclick="() => DeleteSource(source.Id)"
+                                        disabled="@_deleting">
+                                    Delete
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-error">@_error</div>
+    }
+</div>
+
+@code {
+    [Inject] private OmniSiftApiClient Api { get; set; } = default!;
+
+    private List<DataSourceDto> _dataSources = [];
+    private bool _loading = true;
+    private bool _uploading;
+    private bool _deleting;
+    private string? _error;
+    private string? _uploadMessage;
+    private bool _uploadSuccess;
+    private IBrowserFile? _selectedFile;
+    private string _webUrl = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataSources();
+    }
+
+    private async Task LoadDataSources()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _dataSources = await Api.GetDataSourcesAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load data sources: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFile = e.File;
+        _uploadMessage = null;
+    }
+
+    private async Task UploadFile()
+    {
+        if (_selectedFile is null) return;
+
+        _uploading = true;
+        _uploadMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            using var stream = _selectedFile.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+            var result = await Api.UploadFileAsync(stream, _selectedFile.Name);
+
+            _uploadSuccess = result.Status == "completed";
+            _uploadMessage = result.Message;
+            _selectedFile = null;
+
+            await LoadDataSources();
+        }
+        catch (Exception ex)
+        {
+            _uploadSuccess = false;
+            _uploadMessage = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task IngestWeb()
+    {
+        if (string.IsNullOrWhiteSpace(_webUrl)) return;
+
+        _uploading = true;
+        _uploadMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Api.IngestWebAsync(_webUrl);
+
+            _uploadSuccess = result.Status == "completed";
+            _uploadMessage = result.Message;
+            _webUrl = string.Empty;
+
+            await LoadDataSources();
+        }
+        catch (Exception ex)
+        {
+            _uploadSuccess = false;
+            _uploadMessage = $"Web ingestion failed: {ex.Message}";
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task DeleteSource(Guid id)
+    {
+        _deleting = true;
+        StateHasChanged();
+
+        try
+        {
+            await Api.DeleteDataSourceAsync(id);
+            await LoadDataSources();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Delete failed: {ex.Message}";
+        }
+        finally
+        {
+            _deleting = false;
+        }
+    }
+
+    private static string TruncateUrl(string url) =>
+        url.Length > 60 ? url[..57] + "..." : url;
+}

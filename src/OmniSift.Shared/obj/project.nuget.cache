@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "NfTgCNklvwI=",
+  "success": true,
+  "projectFilePath": "/home/steve/projects/OmniSift/src/OmniSift.Shared/OmniSift.Shared.csproj",
+  "expectedPackageFiles": [
+    "/home/steve/.nuget/packages/system.componentmodel.annotations/5.0.0/system.componentmodel.annotations.5.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

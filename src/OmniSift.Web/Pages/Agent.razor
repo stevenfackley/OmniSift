@@ -1,0 +1,162 @@
+@page "/agent"
+
+<PageTitle>OmniSift — Research Agent</PageTitle>
+
+<div class="page-header">
+    <h1>🤖 Research Agent</h1>
+</div>
+
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="chat-container">
+        <div class="chat-messages" @ref="_messagesDiv">
+            @if (_messages.Count == 0)
+            {
+                <div style="text-align: center; color: var(--text-muted); padding: 3rem 0;">
+                    <p style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</p>
+                    <p>Ask a question to search your documents, the web, and archives.</p>
+                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">
+                        Try: "What addresses did John Smith live at?" or "Find information about..."
+                    </p>
+                </div>
+            }
+
+            @foreach (var msg in _messages)
+            {
+                <div class="chat-message @msg.Role">
+                    <div>@((MarkupString)FormatMessage(msg.Content))</div>
+                    @if (msg.PluginsUsed?.Count > 0)
+                    {
+                        <div class="chat-plugins">
+                            @foreach (var plugin in msg.PluginsUsed)
+                            {
+                                <span class="plugin-tag">@plugin</span>
+                            }
+                        </div>
+                    }
+                    @if (msg.DurationMs > 0)
+                    {
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">
+                            ⏱ @(msg.DurationMs)ms
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_isLoading)
+            {
+                <div class="chat-message assistant">
+                    <div class="spinner" style="width: 24px; height: 24px; border-width: 3px;"></div>
+                    <span style="margin-left: 0.5rem; color: var(--text-muted);">Thinking...</span>
+                </div>
+            }
+        </div>
+
+        <div class="chat-input-area">
+            <textarea class="form-textarea"
+                      @bind="_currentQuery"
+                      @bind:event="oninput"
+                      @onkeydown="HandleKeyDown"
+                      placeholder="Ask a research question..."
+                      disabled="@_isLoading"></textarea>
+            <button class="btn btn-primary" @onclick="SendQuery" disabled="@(_isLoading || string.IsNullOrWhiteSpace(_currentQuery))">
+                Send
+            </button>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-error" style="margin-top: 1rem;">@_error</div>
+}
+
+@code {
+    [Inject] private OmniSiftApiClient Api { get; set; } = default!;
+
+    private ElementReference _messagesDiv;
+    private string _currentQuery = string.Empty;
+    private bool _isLoading;
+    private string? _error;
+    private readonly List<ChatMessage> _messages = [];
+    private readonly List<ConversationMessage> _conversationHistory = [];
+
+    private async Task SendQuery()
+    {
+        if (string.IsNullOrWhiteSpace(_currentQuery) || _isLoading)
+            return;
+
+        var query = _currentQuery.Trim();
+        _currentQuery = string.Empty;
+        _error = null;
+
+        // Add user message
+        _messages.Add(new ChatMessage("user", query));
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new AgentQueryRequest
+            {
+                Query = query,
+                ConversationHistory = _conversationHistory.Count > 0
+                    ? _conversationHistory.TakeLast(10).ToList()
+                    : null
+            };
+
+            var response = await Api.QueryAgentAsync(request);
+
+            // Add assistant message
+            _messages.Add(new ChatMessage("assistant", response.Response)
+            {
+                PluginsUsed = response.PluginsUsed,
+                DurationMs = response.DurationMs
+            });
+
+            // Update conversation history
+            _conversationHistory.Add(new ConversationMessage { Role = "user", Content = query });
+            _conversationHistory.Add(new ConversationMessage { Role = "assistant", Content = response.Response });
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await SendQuery();
+        }
+    }
+
+    private static string FormatMessage(string content)
+    {
+        // Basic formatting: convert newlines to <br> and wrap code blocks
+        return content
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\n", "<br/>");
+    }
+
+    private sealed class ChatMessage
+    {
+        public string Role { get; }
+        public string Content { get; }
+        public List<string>? PluginsUsed { get; init; }
+        public int DurationMs { get; init; }
+
+        public ChatMessage(string role, string content)
+        {
+            Role = role;
+            Content = content;
+        }
+    }
+}
