@@ -47,8 +47,11 @@ Desktop.ini
 *.ldf
 *.ndf
 
-# Docker
+# Environment files
+# .env.dev and .env.test are safe to commit (no real secrets)
+# .env and .env.prod are gitignored — populate via secrets manager
 .env
+.env.prod
 
 # Python
 __pycache__/
