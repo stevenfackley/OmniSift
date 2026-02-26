@@ -1,0 +1,51 @@
+ [Dotnet]
+  bin/
+  obj/
+  [Tt]est[Rr]esults/
+  *.user
+  *.userosscache
+  *.sln.docstates
+
+  [Visual Studio]
+  .vs/
+  *.suo
+  *.user
+  *.userosscache
+  *.sln.docstates
+  *.opendb
+  *.dbcache
+  *.docs.dll
+
+
+  [Visual Studio Code]
+  .vscode/*
+  !.vscode/settings.json
+  !.vscode/tasks.json
+  !.vscode/launch.json
+  !.vscode/extensions.json
+  *.code-workspace
+
+  [Windows]
+  Thumbs.db
+  Desktop.ini
+
+  [SQL Server]
+  *.mdf
+  *.ldf
+  *.ndf
+
+
+  [Docker]
+  .env
+
+  [Python]
+  __pycache__/
+  *.py[cod]
+  *$py.class
+  .venv/
+
+
+  [OmniSift Specific]
+  db/data/
+  logs/
+  temp/
