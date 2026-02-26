@@ -1,5 +1,7 @@
 # OmniSift
 
+[![CI](https://github.com/stevenfackley/OmniSift/actions/workflows/ci.yml/badge.svg)](https://github.com/stevenfackley/OmniSift/actions/workflows/ci.yml)
+
 **AI-Powered Multi-Tenant Research SaaS for Personal & Family History**
 
 OmniSift is an agentic research application that aggregates, parses, and synthesizes personal and family history data. It searches internal user-provided documents and actively scrapes public web sources to build comprehensive personal profiles and timelines.
