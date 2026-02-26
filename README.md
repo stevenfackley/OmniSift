@@ -154,4 +154,4 @@ dotnet test tests/OmniSift.IntegrationTests/
 
 ## 📜 License
 
-Proprietary — All rights reserved.
+Source-available — forks permitted for personal and non-commercial use. Commercial use requires written permission. See [LICENSE](./LICENSE) for full terms.
