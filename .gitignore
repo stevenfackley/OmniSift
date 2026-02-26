@@ -1,51 +1,62 @@
- [Dotnet]
-  bin/
-  obj/
-  [Tt]est[Rr]esults/
-  *.user
-  *.userosscache
-  *.sln.docstates
+# Build output
+bin/
+obj/
+out/
+publish/
+**/Release/
+**/Debug/
 
-  [Visual Studio]
-  .vs/
-  *.suo
-  *.user
-  *.userosscache
-  *.sln.docstates
-  *.opendb
-  *.dbcache
-  *.docs.dll
+# Test results
+[Tt]est[Rr]esults/
+*.trx
+*.coverage
+coverage*/
 
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
 
-  [Visual Studio Code]
-  .vscode/*
-  !.vscode/settings.json
-  !.vscode/tasks.json
-  !.vscode/launch.json
-  !.vscode/extensions.json
-  *.code-workspace
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.opendb
+*.dbcache
+*.docs.dll
 
-  [Windows]
-  Thumbs.db
-  Desktop.ini
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
 
-  [SQL Server]
-  *.mdf
-  *.ldf
-  *.ndf
+# Rider
+.idea/
 
+# Windows
+Thumbs.db
+Desktop.ini
 
-  [Docker]
-  .env
+# SQL Server
+*.mdf
+*.ldf
+*.ndf
 
-  [Python]
-  __pycache__/
-  *.py[cod]
-  *$py.class
-  .venv/
+# Docker
+.env
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
 
-  [OmniSift Specific]
-  db/data/
-  logs/
-  temp/
+# OmniSift
+infra/db/data/
+logs/
+temp/
