@@ -30,27 +30,17 @@ OmniSift is an agentic research application that aggregates, parses, and synthes
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/your-org/OmniSift.git
+git clone https://github.com/stevenfackley/OmniSift.git
 cd OmniSift
 ```
 
-Create a `.env` file in the project root:
+Fill in your API keys in `.env.dev` (committed with safe defaults — only the keys need updating):
 
-```env
-# Database
-POSTGRES_USER=omnisift
-POSTGRES_PASSWORD=your_secure_password
-POSTGRES_DB=omnisift
-
-# API Keys (Replace with your actual keys)
+```bash
+# Edit .env.dev and set your personal dev keys
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 TAVILY_API_KEY=tvly-...
-
-# JWT
-JWT_SECRET=your_jwt_secret_at_least_32_chars_long
-JWT_ISSUER=https://omnisift.local
-JWT_AUDIENCE=omnisift-api
 ```
 
 ### 2. Build & Run
@@ -74,35 +64,42 @@ docker compose up --build
 
 ```
 OmniSift/
-├── README.md                          # This file
-├── docker-compose.yml                 # Container orchestration
-├── .env                               # Environment variables (create manually)
+├── OmniSift.sln                       # Solution file
+├── docker-compose.yml                 # Dev orchestration (uses .env.dev)
+├── docker-compose.prod.yml            # Prod overlay — adds Docker secrets
+├── .env.example                       # Environment variable template
+├── .env.dev                           # Development defaults (committed)
+├── .env.test                          # Test/CI defaults (committed)
+├── .env.prod                          # Production values (gitignored)
+├── .github/
+│   └── workflows/
+│       └── ci.yml                     # Build & test pipeline
 ├── docs/
 │   ├── PDD.md                         # Product Design Document
 │   └── SDD.md                         # Software Design Document
 ├── infra/
 │   └── db/
-│       └── init.sql                   # Database schema + RLS policies
+│       └── init.sql                   # PostgreSQL schema + RLS policies
+├── secrets/
+│   └── README.md                      # How to populate Docker secret files
 ├── src/
-│   ├── OmniSift.Shared/              # Shared DTOs and contracts
-│   ├── OmniSift.Api/                 # ASP.NET Core Web API
-│   │   ├── Controllers/              # API endpoints
-│   │   ├── Data/                     # EF Core DbContext
-│   │   ├── Middleware/               # Tenant resolution middleware
-│   │   ├── Models/                   # Domain entities
-│   │   ├── Plugins/                  # Semantic Kernel plugins
-│   │   ├── Services/                 # Business logic & data ingestion
+│   ├── OmniSift.Shared/               # Shared DTOs and contracts
+│   ├── OmniSift.Api/                  # ASP.NET Core Web API
+│   │   ├── Controllers/               # API endpoints
+│   │   ├── Data/                      # EF Core DbContext
+│   │   ├── Middleware/                # Tenant resolution middleware
+│   │   ├── Models/                    # Domain entities
+│   │   ├── Plugins/                   # Semantic Kernel plugins
+│   │   ├── Services/                  # Business logic & data ingestion
 │   │   └── Dockerfile
-│   └── OmniSift.Web/                # Blazor WebAssembly frontend
-│       ├── Pages/                    # Routable pages
-│       ├── Components/               # Reusable UI components
-│       ├── Services/                 # HTTP client services
-│       ├── Layout/                   # App shell layout
+│   └── OmniSift.Web/                  # Blazor WebAssembly frontend
+│       ├── Pages/                     # Routable pages
+│       ├── Layout/                    # App shell layout
+│       ├── Services/                  # HTTP client services
 │       └── Dockerfile
-├── tests/
-│   ├── OmniSift.UnitTests/          # xUnit unit tests
-│   └── OmniSift.IntegrationTests/   # xUnit integration tests
-└── OmniSift.sln                      # Solution file
+└── tests/
+    ├── OmniSift.UnitTests/            # xUnit unit tests
+    └── OmniSift.IntegrationTests/     # xUnit integration tests
 ```
 
 ---
