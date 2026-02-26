@@ -53,6 +53,9 @@ Desktop.ini
 .env
 .env.prod
 
+# Docker secrets — plain-text secret files (never commit)
+secrets/*.txt
+
 # Python
 __pycache__/
 *.py[cod]

@@ -12,6 +12,12 @@ using OmniSift.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Docker Secrets ───────────────────────────────────────────
+// In production, docker-compose.prod.yml mounts secrets as files under /run/secrets/.
+// AddKeyPerFile reads each file as a config key, converting __ to : (e.g.
+// Anthropic__ApiKey → Anthropic:ApiKey). Added after env vars so secrets win.
+builder.Configuration.AddKeyPerFile(directoryPath: "/run/secrets", optional: true);
+
 // ── Database ────────────────────────────────────────────────
 builder.Services.AddDbContext<OmniSiftDbContext>(options =>
 {

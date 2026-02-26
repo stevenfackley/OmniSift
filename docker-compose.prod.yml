@@ -1,0 +1,58 @@
+version: "3.9"
+
+# Production overlay — apply with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Sensitive values are supplied via Docker file-based secrets.
+# Populate ./secrets/*.txt before deploying (see secrets/README.md).
+# The API reads secrets from /run/secrets/ via AddKeyPerFile in Program.cs.
+
+services:
+  db:
+    env_file: .env.prod
+    secrets:
+      - postgres_password
+    environment:
+      # POSTGRES_PASSWORD_FILE is natively supported by the postgres image.
+      # It overrides POSTGRES_PASSWORD, keeping the password out of env vars.
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+
+  api:
+    env_file: .env.prod
+    secrets:
+      - Anthropic__ApiKey
+      - OpenAI__ApiKey
+      - Tavily__ApiKey
+      - Jwt__Secret
+      - ConnectionStrings__DefaultConnection
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      # Clear the dev mappings — sensitive values now come from Docker secrets
+      # which AddKeyPerFile reads and applies with higher priority than env vars.
+      Anthropic__ApiKey: ""
+      OpenAI__ApiKey: ""
+      Tavily__ApiKey: ""
+      Jwt__Secret: ""
+      ConnectionStrings__DefaultConnection: ""
+
+  web:
+    env_file: .env.prod
+
+# Docker file-based secrets.
+# Each secret is a plain-text file containing only the secret value.
+# In a CI/CD pipeline, write these files from your secrets manager
+# (Vault, AWS Secrets Manager, Azure Key Vault, etc.) at deploy time.
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  Anthropic__ApiKey:
+    file: ./secrets/Anthropic__ApiKey.txt
+  OpenAI__ApiKey:
+    file: ./secrets/OpenAI__ApiKey.txt
+  Tavily__ApiKey:
+    file: ./secrets/Tavily__ApiKey.txt
+  Jwt__Secret:
+    file: ./secrets/Jwt__Secret.txt
+  ConnectionStrings__DefaultConnection:
+    file: ./secrets/ConnectionStrings__DefaultConnection.txt
