@@ -13,7 +13,20 @@
 ```bash
 git clone https://github.com/stevenfackley/OmniSift.git
 cd OmniSift
-cp .env.example .env   # fill in your API keys
+```
+
+`.env.dev` is committed with safe defaults. Fill in your personal API keys:
+
+```bash
+# Open .env.dev and set:
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+TAVILY_API_KEY=tvly-...
+```
+
+Start the database and build:
+
+```bash
 docker compose up -d db
 dotnet restore OmniSift.sln
 dotnet build OmniSift.sln
@@ -27,6 +40,27 @@ dotnet test OmniSift.sln
 
 Tests use an in-memory database — no running PostgreSQL instance is required.
 
+### Running the Full Stack
+
+```bash
+docker compose up --build
+```
+
+| Service | URL |
+|---|---|
+| Frontend (Blazor) | http://localhost:5080 |
+| Backend API | http://localhost:5000 |
+| Swagger | http://localhost:5000/swagger |
+| PostgreSQL | localhost:5432 |
+
+### Running with Production Config (local)
+
+See `secrets/README.md` for how to populate the required secret files, then:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+```
+
 ## Branch & PR Workflow
 
 - Branch from `main` using the pattern `feat/`, `fix/`, or `chore/` followed by a short description
@@ -37,18 +71,23 @@ Tests use an in-memory database — no running PostgreSQL instance is required.
 
 - Follow standard C# conventions (PascalCase types/methods, camelCase locals)
 - Async methods must be suffixed with `Async`
-- Do not commit secrets, build artifacts, or `.env` files — the `.gitignore` covers these
+- Do not commit secrets, build artifacts, or `.env.prod` — the `.gitignore` covers these
+- `.env.dev` and `.env.test` are safe to commit (no real secrets)
 
 ## Project Structure
 
 ```
-src/OmniSift.Api/        # ASP.NET Core backend
-src/OmniSift.Web/        # Blazor WebAssembly frontend
-src/OmniSift.Shared/     # Shared DTOs and contracts
-tests/OmniSift.UnitTests/
-tests/OmniSift.IntegrationTests/
-infra/db/                # PostgreSQL schema and seed scripts
-docs/                    # Design documents
+src/OmniSift.Api/               # ASP.NET Core backend
+src/OmniSift.Web/               # Blazor WebAssembly frontend
+src/OmniSift.Shared/            # Shared DTOs and contracts
+tests/OmniSift.UnitTests/       # xUnit unit tests
+tests/OmniSift.IntegrationTests/ # xUnit integration tests
+infra/db/                       # PostgreSQL schema and seed scripts
+docs/                           # Design documents (PDD, SDD)
+secrets/                        # Docker secret files (*.txt gitignored)
+.env.dev                        # Dev environment defaults
+.env.test                       # Test/CI environment defaults
+.env.example                    # Full variable reference
 ```
 
 ## Reporting Issues
