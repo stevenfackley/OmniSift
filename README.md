@@ -73,12 +73,14 @@ docker compose up --build
 ```
 OmniSift/
 ├── README.md                          # This file
-├── PDD.md                             # Product Design Document
-├── SDD.md                             # Software Design Document
 ├── docker-compose.yml                 # Container orchestration
 ├── .env                               # Environment variables (create manually)
-├── db/
-│   └── init.sql                       # Database schema + RLS policies
+├── docs/
+│   ├── PDD.md                         # Product Design Document
+│   └── SDD.md                         # Software Design Document
+├── infra/
+│   └── db/
+│       └── init.sql                   # Database schema + RLS policies
 ├── src/
 │   ├── OmniSift.Shared/              # Shared DTOs and contracts
 │   ├── OmniSift.Api/                 # ASP.NET Core Web API
@@ -145,8 +147,8 @@ dotnet test tests/OmniSift.IntegrationTests/
 
 ## 📝 Documentation
 
-- [Product Design Document (PDD)](./PDD.md)
-- [Software Design Document (SDD)](./SDD.md)
+- [Product Design Document (PDD)](./docs/PDD.md)
+- [Software Design Document (SDD)](./docs/SDD.md)
 
 ## 📜 License
 
