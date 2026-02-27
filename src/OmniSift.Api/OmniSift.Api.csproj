@@ -24,6 +24,9 @@
     <!-- OpenAPI / Swagger -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
 
+    <!-- HTTP Resilience (retry, timeout, circuit breaker via Polly) -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.4.0" />
+
   </ItemGroup>
 
   <ItemGroup>

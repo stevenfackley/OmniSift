@@ -13,20 +13,13 @@ namespace OmniSift.Web.Services;
 /// Strongly-typed HTTP client for the OmniSift API.
 /// Automatically includes the X-Tenant-Id header on all requests.
 /// </summary>
-public sealed class OmniSiftApiClient
+public sealed class OmniSiftApiClient(HttpClient httpClient)
 {
-    private readonly HttpClient _httpClient;
-
     /// <summary>
     /// The current tenant ID. In a real app this would come from
     /// authentication; for now we use the dev tenant.
     /// </summary>
     public Guid TenantId { get; set; } = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
-
-    public OmniSiftApiClient(HttpClient httpClient)
-    {
-        _httpClient = httpClient;
-    }
 
     private HttpRequestMessage CreateRequest(HttpMethod method, string url)
     {
@@ -43,7 +36,7 @@ public sealed class OmniSiftApiClient
     public async Task<List<DataSourceDto>> GetDataSourcesAsync()
     {
         var request = CreateRequest(HttpMethod.Get, "api/datasources");
-        var response = await _httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<List<DataSourceDto>>() ?? [];
     }
@@ -54,7 +47,7 @@ public sealed class OmniSiftApiClient
     public async Task<DataSourceDto?> GetDataSourceAsync(Guid id)
     {
         var request = CreateRequest(HttpMethod.Get, $"api/datasources/{id}");
-        var response = await _httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request);
 
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
@@ -84,7 +77,7 @@ public sealed class OmniSiftApiClient
         };
         request.Headers.Add("X-Tenant-Id", TenantId.ToString());
 
-        var response = await _httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<IngestionResponse>()
             ?? new IngestionResponse { Status = "error", Message = "Failed to parse response." };
@@ -97,7 +90,7 @@ public sealed class OmniSiftApiClient
     {
         var request = CreateRequest(HttpMethod.Post, "api/datasources/web");
         request.Content = JsonContent.Create(new WebIngestionRequest { Url = url });
-        var response = await _httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<IngestionResponse>()
             ?? new IngestionResponse { Status = "error", Message = "Failed to parse response." };
@@ -109,7 +102,7 @@ public sealed class OmniSiftApiClient
     public async Task DeleteDataSourceAsync(Guid id)
     {
         var request = CreateRequest(HttpMethod.Delete, $"api/datasources/{id}");
-        var response = await _httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
     }
 
@@ -122,7 +115,7 @@ public sealed class OmniSiftApiClient
     {
         var request = CreateRequest(HttpMethod.Post, "api/agent/query");
         request.Content = JsonContent.Create(queryRequest);
-        var response = await _httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<AgentQueryResponse>()
             ?? new AgentQueryResponse { Response = "Failed to parse response." };
@@ -137,7 +130,7 @@ public sealed class OmniSiftApiClient
     {
         try
         {
-            var response = await _httpClient.GetAsync("api/health");
+            var response = await httpClient.GetAsync("api/health");
             return response.IsSuccessStatusCode;
         }
         catch

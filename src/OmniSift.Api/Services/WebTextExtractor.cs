@@ -13,10 +13,8 @@ namespace OmniSift.Api.Services;
 /// Strips scripts, styles, and navigation elements; prioritizes
 /// article/main content areas.
 /// </summary>
-public sealed class WebTextExtractor : ITextExtractor
+public sealed class WebTextExtractor(ILogger<WebTextExtractor> logger) : ITextExtractor
 {
-    private readonly ILogger<WebTextExtractor> _logger;
-
     /// <summary>
     /// HTML tags that should be completely removed (including their content).
     /// </summary>
@@ -39,11 +37,6 @@ public sealed class WebTextExtractor : ITextExtractor
         "//*[contains(@class,'post')]"
     ];
 
-    public WebTextExtractor(ILogger<WebTextExtractor> logger)
-    {
-        _logger = logger;
-    }
-
     /// <inheritdoc />
     public string SourceType => "web";
 
@@ -55,14 +48,14 @@ public sealed class WebTextExtractor : ITextExtractor
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        _logger.LogDebug("Extracting text from HTML: {FileName}", fileName ?? "unknown");
+        logger.LogDebug("Extracting text from HTML: {FileName}", fileName ?? "unknown");
 
         using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
         var html = await reader.ReadToEndAsync(cancellationToken);
 
         if (string.IsNullOrWhiteSpace(html))
         {
-            _logger.LogWarning("Empty HTML content: {FileName}", fileName ?? "unknown");
+            logger.LogWarning("Empty HTML content: {FileName}", fileName ?? "unknown");
             return string.Empty;
         }
 
@@ -89,7 +82,7 @@ public sealed class WebTextExtractor : ITextExtractor
             text = $"[Title: {HtmlEntity.DeEntitize(title)}]\n\n{text}";
         }
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Extracted {Length} chars from HTML: {FileName}",
             text.Length, fileName ?? "unknown");
 

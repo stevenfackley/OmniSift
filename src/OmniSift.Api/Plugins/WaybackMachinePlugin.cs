@@ -16,19 +16,10 @@ namespace OmniSift.Api.Plugins;
 /// to find archived snapshots of web pages. Useful for historical
 /// research and recovering removed or changed web content.
 /// </summary>
-public sealed class WaybackMachinePlugin
+public sealed class WaybackMachinePlugin(
+    HttpClient httpClient,
+    ILogger<WaybackMachinePlugin> logger)
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<WaybackMachinePlugin> _logger;
-
-    public WaybackMachinePlugin(
-        HttpClient httpClient,
-        ILogger<WaybackMachinePlugin> logger)
-    {
-        _httpClient = httpClient;
-        _logger = logger;
-    }
-
     [KernelFunction("GetArchivedPage")]
     [Description("Checks the Internet Archive's Wayback Machine for an archived snapshot of a web page. " +
                  "Returns the closest archived snapshot URL and timestamp if available. " +
@@ -39,18 +30,18 @@ public sealed class WaybackMachinePlugin
         if (string.IsNullOrWhiteSpace(url))
             return "No URL provided for Wayback Machine lookup.";
 
-        _logger.LogDebug("WaybackMachine: looking up {Url}", url);
+        logger.LogDebug("WaybackMachine: looking up {Url}", url);
 
         try
         {
             var encodedUrl = Uri.EscapeDataString(url);
             var apiUrl = $"http://archive.org/wayback/available?url={encodedUrl}";
 
-            var response = await _httpClient.GetFromJsonAsync<WaybackResponse>(apiUrl);
+            var response = await httpClient.GetFromJsonAsync<WaybackResponse>(apiUrl);
 
             if (response?.ArchivedSnapshots?.Closest is null)
             {
-                _logger.LogInformation("No Wayback Machine snapshot found for {Url}", url);
+                logger.LogInformation("No Wayback Machine snapshot found for {Url}", url);
                 return JsonSerializer.Serialize(new
                 {
                     found = false,
@@ -61,7 +52,7 @@ public sealed class WaybackMachinePlugin
 
             var snapshot = response.ArchivedSnapshots.Closest;
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Wayback Machine snapshot found for {Url}: {SnapshotUrl} ({Timestamp})",
                 url, snapshot.Url, snapshot.Timestamp);
 
@@ -77,7 +68,7 @@ public sealed class WaybackMachinePlugin
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "WaybackMachine lookup failed for {Url}", url);
+            logger.LogError(ex, "WaybackMachine lookup failed for {Url}", url);
             return $"Error querying Wayback Machine: {ex.Message}";
         }
     }

@@ -5,6 +5,7 @@
 
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -17,13 +18,13 @@ namespace OmniSift.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public sealed class AgentController : ControllerBase
+[EnableRateLimiting("per-tenant")]
+public sealed class AgentController(
+    Kernel kernel,
+    OmniSiftDbContext dbContext,
+    ITenantContext tenantContext,
+    ILogger<AgentController> logger) : ControllerBase
 {
-    private readonly Kernel _kernel;
-    private readonly OmniSiftDbContext _dbContext;
-    private readonly ITenantContext _tenantContext;
-    private readonly ILogger<AgentController> _logger;
-
     /// <summary>
     /// System prompt for the research agent.
     /// </summary>
@@ -42,18 +43,6 @@ public sealed class AgentController : ControllerBase
         - When presenting multiple pieces of information, organize them logically.
         """;
 
-    public AgentController(
-        Kernel kernel,
-        OmniSiftDbContext dbContext,
-        ITenantContext tenantContext,
-        ILogger<AgentController> logger)
-    {
-        _kernel = kernel;
-        _dbContext = dbContext;
-        _tenantContext = tenantContext;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Submit a research query to the AI agent.
     /// The agent will search documents, the web, and archives as needed.
@@ -68,95 +57,86 @@ public sealed class AgentController : ControllerBase
 
         var sw = Stopwatch.StartNew();
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Agent query from tenant {TenantId}: {QueryPreview}",
-            _tenantContext.TenantId,
+            tenantContext.TenantId,
             request.Query.Length > 100 ? request.Query[..100] + "..." : request.Query);
 
-        try
+        var chatService = kernel.GetRequiredService<IChatCompletionService>();
+
+        // Build chat history
+        var chatHistory = new ChatHistory();
+        chatHistory.AddSystemMessage(SystemPrompt);
+
+        // Add conversation history if provided
+        if (request.ConversationHistory is not null)
         {
-            var chatService = _kernel.GetRequiredService<IChatCompletionService>();
-
-            // Build chat history
-            var chatHistory = new ChatHistory();
-            chatHistory.AddSystemMessage(SystemPrompt);
-
-            // Add conversation history if provided
-            if (request.ConversationHistory is not null)
+            foreach (var msg in request.ConversationHistory)
             {
-                foreach (var msg in request.ConversationHistory)
+                switch (msg.Role.ToLowerInvariant())
                 {
-                    switch (msg.Role.ToLowerInvariant())
-                    {
-                        case "user":
-                            chatHistory.AddUserMessage(msg.Content);
-                            break;
-                        case "assistant":
-                            chatHistory.AddAssistantMessage(msg.Content);
-                            break;
-                    }
+                    case "user":
+                        chatHistory.AddUserMessage(msg.Content);
+                        break;
+                    case "assistant":
+                        chatHistory.AddAssistantMessage(msg.Content);
+                        break;
                 }
             }
-
-            // Add the current query
-            chatHistory.AddUserMessage(request.Query);
-
-            // Configure auto function calling
-            var executionSettings = new PromptExecutionSettings
-            {
-                FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
-            };
-
-            // Execute with Semantic Kernel
-            var result = await chatService.GetChatMessageContentAsync(
-                chatHistory,
-                executionSettings,
-                _kernel,
-                cancellationToken);
-
-            sw.Stop();
-
-            // Extract plugins used from function call results in chat history
-            var pluginsUsed = chatHistory
-                .Where(m => m.Role == AuthorRole.Tool)
-                .Select(m => m.Metadata?.GetValueOrDefault("ChatCompletionsFunctionToolCall.Name")?.ToString())
-                .Where(name => name is not null)
-                .Distinct()
-                .Cast<string>()
-                .ToList();
-
-            var responseText = result.Content ?? "I was unable to generate a response.";
-
-            // Save to query history
-            var queryHistory = new QueryHistory
-            {
-                TenantId = _tenantContext.TenantId,
-                QueryText = request.Query,
-                ResponseText = responseText,
-                PluginsUsed = pluginsUsed,
-                DurationMs = (int)sw.ElapsedMilliseconds
-            };
-
-            _dbContext.QueryHistories.Add(queryHistory);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            _logger.LogInformation(
-                "Agent query completed in {DurationMs}ms, plugins={Plugins}",
-                sw.ElapsedMilliseconds, string.Join(", ", pluginsUsed));
-
-            return Ok(new AgentQueryResponse
-            {
-                Response = responseText,
-                PluginsUsed = pluginsUsed,
-                DurationMs = (int)sw.ElapsedMilliseconds,
-                Sources = [] // Sources are embedded in the response text by the agent
-            });
         }
-        catch (Exception ex)
+
+        // Add the current query
+        chatHistory.AddUserMessage(request.Query);
+
+        // Configure auto function calling
+        var executionSettings = new PromptExecutionSettings
         {
-            sw.Stop();
-            _logger.LogError(ex, "Agent query failed after {DurationMs}ms", sw.ElapsedMilliseconds);
-            return StatusCode(500, new { error = "Agent query failed.", details = ex.Message });
-        }
+            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+        };
+
+        // Execute with Semantic Kernel
+        var result = await chatService.GetChatMessageContentAsync(
+            chatHistory,
+            executionSettings,
+            kernel,
+            cancellationToken);
+
+        sw.Stop();
+
+        // Extract plugins used from function call results in chat history
+        var pluginsUsed = chatHistory
+            .Where(m => m.Role == AuthorRole.Tool)
+            .Select(m => m.Metadata?.GetValueOrDefault("ChatCompletionsFunctionToolCall.Name")?.ToString())
+            .Where(name => name is not null)
+            .Distinct()
+            .Cast<string>()
+            .ToList();
+
+        var responseText = result.Content ?? "I was unable to generate a response.";
+
+        // Save to query history
+        var queryHistory = new QueryHistory
+        {
+            TenantId = tenantContext.TenantId,
+            QueryText = request.Query,
+            ResponseText = responseText,
+            PluginsUsed = pluginsUsed,
+            DurationMs = (int)sw.ElapsedMilliseconds
+        };
+
+        dbContext.QueryHistories.Add(queryHistory);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Agent query completed in {DurationMs}ms, plugins={Plugins}",
+            sw.ElapsedMilliseconds, string.Join(", ", pluginsUsed));
+
+        return Ok(new AgentQueryResponse
+        {
+            Response = responseText,
+            PluginsUsed = pluginsUsed,
+            DurationMs = (int)sw.ElapsedMilliseconds,
+            Sources = [] // Sources are embedded in the response text by the agent
+        });
     }
 }

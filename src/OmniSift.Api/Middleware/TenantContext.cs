@@ -21,21 +21,14 @@ public interface ITenantContext
 /// Resolves the current tenant ID from HttpContext items,
 /// which is set by the TenantMiddleware.
 /// </summary>
-public sealed class TenantContext : ITenantContext
+public sealed class TenantContext(IHttpContextAccessor httpContextAccessor) : ITenantContext
 {
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public TenantContext(IHttpContextAccessor httpContextAccessor)
-    {
-        _httpContextAccessor = httpContextAccessor;
-    }
-
     /// <inheritdoc />
     public Guid TenantId
     {
         get
         {
-            var context = _httpContextAccessor.HttpContext
+            var context = httpContextAccessor.HttpContext
                 ?? throw new InvalidOperationException("No HTTP context available.");
 
             if (context.Items.TryGetValue("TenantId", out var tenantIdObj) &&

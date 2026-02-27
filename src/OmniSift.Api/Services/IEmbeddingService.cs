@@ -5,6 +5,8 @@
 
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
+using OmniSift.Api.Options;
 using Pgvector;
 
 namespace OmniSift.Api.Services;
@@ -17,35 +19,24 @@ public interface IEmbeddingService
     /// <summary>
     /// Generates a vector embedding for the given text.
     /// </summary>
-    /// <param name="text">Input text to embed.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Vector embedding (3072 dimensions for text-embedding-3-large).</returns>
     Task<Vector> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Generates vector embeddings for multiple texts in a batch.
     /// </summary>
-    /// <param name="texts">Input texts to embed.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>List of vector embeddings in the same order as inputs.</returns>
     Task<IReadOnlyList<Vector>> GenerateEmbeddingsAsync(IEnumerable<string> texts, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// OpenAI embedding service implementation using text-embedding-3-large.
 /// </summary>
-public sealed class OpenAIEmbeddingService : IEmbeddingService
+public sealed class OpenAIEmbeddingService(
+    HttpClient httpClient,
+    IOptions<OpenAiOptions> openAiOptions,
+    ILogger<OpenAIEmbeddingService> logger) : IEmbeddingService
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<OpenAIEmbeddingService> _logger;
-    private const string Model = "text-embedding-3-large";
-    private const int Dimensions = 3072;
-
-    public OpenAIEmbeddingService(HttpClient httpClient, ILogger<OpenAIEmbeddingService> logger)
-    {
-        _httpClient = httpClient;
-        _logger = logger;
-    }
+    private readonly string _model = openAiOptions.Value.EmbeddingModel;
+    private readonly int _dimensions = openAiOptions.Value.EmbeddingDimensions;
 
     /// <inheritdoc />
     public async Task<Vector> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default)
@@ -64,16 +55,16 @@ public sealed class OpenAIEmbeddingService : IEmbeddingService
         if (textList.Count == 0)
             return [];
 
-        _logger.LogDebug("Generating embeddings for {Count} text(s) using {Model}", textList.Count, Model);
+        logger.LogDebug("Generating embeddings for {Count} text(s) using {Model}", textList.Count, _model);
 
         var request = new OpenAIEmbeddingRequest
         {
             Input = textList,
-            Model = Model,
-            Dimensions = Dimensions
+            Model = _model,
+            Dimensions = _dimensions
         };
 
-        var response = await _httpClient.PostAsJsonAsync(
+        var response = await httpClient.PostAsJsonAsync(
             "https://api.openai.com/v1/embeddings",
             request,
             cancellationToken);

@@ -3,12 +3,18 @@
 // Configures services, middleware, and Semantic Kernel
 // ============================================================
 
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using OmniSift.Api.Data;
+using OmniSift.Api.Infrastructure;
 using OmniSift.Api.Middleware;
+using OmniSift.Api.Options;
 using OmniSift.Api.Plugins;
 using OmniSift.Api.Services;
+using OmniSift.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +23,23 @@ var builder = WebApplication.CreateBuilder(args);
 // AddKeyPerFile reads each file as a config key, converting __ to : (e.g.
 // Anthropic__ApiKey → Anthropic:ApiKey). Added after env vars so secrets win.
 builder.Configuration.AddKeyPerFile(directoryPath: "/run/secrets", optional: true);
+
+// ── Strongly-Typed Options ───────────────────────────────────
+builder.Services.Configure<AnthropicOptions>(
+    builder.Configuration.GetSection(AnthropicOptions.Section));
+
+builder.Services.Configure<OpenAiOptions>(
+    builder.Configuration.GetSection(OpenAiOptions.Section));
+
+builder.Services.Configure<TavilyOptions>(
+    builder.Configuration.GetSection(TavilyOptions.Section));
+
+builder.Services.Configure<OmniSift.Api.Options.CorsOptions>(
+    builder.Configuration.GetSection(OmniSift.Api.Options.CorsOptions.Section));
+
+// ── Global Exception Handler + ProblemDetails ────────────────
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // ── Database ────────────────────────────────────────────────
 builder.Services.AddDbContext<OmniSiftDbContext>(options =>
@@ -37,19 +60,24 @@ builder.Services.AddScoped<ITenantContext, TenantContext>();
 // ── HTTP Clients ────────────────────────────────────────────
 builder.Services.AddHttpClient();
 
-// OpenAI embedding client
-builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>(client =>
+// OpenAI embedding client — with resilience pipeline
+builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>((sp, client) =>
 {
-    client.DefaultRequestHeaders.Add("Authorization",
-        $"Bearer {builder.Configuration["OpenAI:ApiKey"]}");
+    var opts = sp.GetRequiredService<IOptions<OpenAiOptions>>().Value;
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {opts.ApiKey}");
     client.Timeout = TimeSpan.FromSeconds(60);
-});
+})
+.AddStandardResilienceHandler();
 
 // ── Data Ingestion Services ─────────────────────────────────
 builder.Services.AddSingleton<ITextChunker, TextChunker>();
-builder.Services.AddScoped<ITextExtractor, PdfTextExtractor>();
-builder.Services.AddScoped<ITextExtractor, SmsTextExtractor>();
-builder.Services.AddScoped<ITextExtractor, WebTextExtractor>();
+
+// Keyed DI: each extractor registered by its source-type key.
+// DocumentIngestionService resolves via [FromKeyedServices] — no runtime scan.
+builder.Services.AddKeyedScoped<ITextExtractor, PdfTextExtractor>("pdf");
+builder.Services.AddKeyedScoped<ITextExtractor, SmsTextExtractor>("sms");
+builder.Services.AddKeyedScoped<ITextExtractor, WebTextExtractor>("web");
+
 builder.Services.AddScoped<IDocumentIngestionService, DocumentIngestionService>();
 
 // ── Semantic Kernel ─────────────────────────────────────────
@@ -57,25 +85,28 @@ builder.Services.AddScoped<IDocumentIngestionService, DocumentIngestionService>(
 builder.Services.AddHttpClient("AnthropicChat", client =>
 {
     client.BaseAddress = new Uri("https://api.anthropic.com/v1/");
+})
+.AddStandardResilienceHandler(options =>
+{
+    options.Retry.MaxRetryAttempts = 3;
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(120);
 });
 
 // Build a base Kernel once and store it as a singleton Func factory.
-// We use Func<Kernel> instead of Kernel directly so the scoped registration
-// can resolve the base builder without a circular DI conflict.
 builder.Services.AddSingleton<Func<Kernel>>(sp =>
 {
-    var anthropicApiKey = sp.GetRequiredService<IConfiguration>()["Anthropic:ApiKey"] ?? string.Empty;
+    var anthropicOpts = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
 
     return () =>
     {
         var kernelBuilder = Kernel.CreateBuilder();
 
-        if (!string.IsNullOrWhiteSpace(anthropicApiKey))
+        if (!string.IsNullOrWhiteSpace(anthropicOpts.ApiKey))
         {
             kernelBuilder.AddOpenAIChatCompletion(
-                modelId: "claude-sonnet-4-20250514",
-                apiKey: anthropicApiKey,
+                modelId: anthropicOpts.ModelId,
+                apiKey: anthropicOpts.ApiKey,
                 httpClient: httpClientFactory.CreateClient("AnthropicChat"));
         }
 
@@ -83,19 +114,21 @@ builder.Services.AddSingleton<Func<Kernel>>(sp =>
     };
 });
 
-// Register SK plugins — these are resolved per-request via DI
+// Plugins — WebScraper and WaybackMachine use typed HttpClients with resilience
+builder.Services.AddHttpClient<WebScraperPlugin>()
+    .AddStandardResilienceHandler();
+
+builder.Services.AddHttpClient<WaybackMachinePlugin>()
+    .AddStandardResilienceHandler();
+
 builder.Services.AddScoped<VectorSearchPlugin>();
-builder.Services.AddScoped<WebScraperPlugin>();
-builder.Services.AddScoped<WaybackMachinePlugin>();
 
 // Register a scoped Kernel that includes plugins for each request.
-// Resolves the base kernel via Func<Kernel> to avoid circular DI.
 builder.Services.AddScoped(sp =>
 {
     var kernelFactory = sp.GetRequiredService<Func<Kernel>>();
     var kernel = kernelFactory();
 
-    // Import plugins from DI
     kernel.ImportPluginFromObject(sp.GetRequiredService<VectorSearchPlugin>(), "VectorSearch");
     kernel.ImportPluginFromObject(sp.GetRequiredService<WebScraperPlugin>(), "WebScraper");
     kernel.ImportPluginFromObject(sp.GetRequiredService<WaybackMachinePlugin>(), "WaybackMachine");
@@ -116,22 +149,52 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// ── JSON Source Generation ───────────────────────────────────
+// Registers compile-time serialization for all shared DTOs. Eliminates
+// runtime reflection and enables Native AOT compatibility.
+builder.Services.ConfigureHttpJsonOptions(opts =>
+    opts.SerializerOptions.TypeInfoResolverChain.Insert(0, OmniSiftJsonContext.Default));
+
 // ── CORS (allow Blazor frontend) ────────────────────────────
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5080",
-                "http://omnisift-web:80")
+        // Resolve origins from strongly-typed options at registration time
+        var corsOpts = builder.Configuration
+            .GetSection(OmniSift.Api.Options.CorsOptions.Section)
+            .Get<OmniSift.Api.Options.CorsOptions>()
+            ?? new OmniSift.Api.Options.CorsOptions();
+
+        policy.WithOrigins(corsOpts.AllowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
 });
 
+// ── Rate Limiting (per-tenant token bucket) ─────────────────
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("per-tenant", ctx =>
+        RateLimitPartition.GetTokenBucketLimiter(
+            partitionKey: ctx.Request.Headers["X-Tenant-Id"].ToString(),
+            factory: _ => new TokenBucketRateLimiterOptions
+            {
+                TokenLimit = 20,
+                ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+                TokensPerPeriod = 10,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 var app = builder.Build();
 
 // ── Middleware Pipeline ──────────────────────────────────────
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -139,6 +202,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiter();
 
 // Tenant resolution middleware (sets RLS session variable)
 app.UseTenantMiddleware();

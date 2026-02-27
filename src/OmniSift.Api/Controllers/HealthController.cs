@@ -11,17 +11,10 @@ namespace OmniSift.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public sealed class HealthController : ControllerBase
+public sealed class HealthController(
+    OmniSiftDbContext dbContext,
+    ILogger<HealthController> logger) : ControllerBase
 {
-    private readonly OmniSiftDbContext _dbContext;
-    private readonly ILogger<HealthController> _logger;
-
-    public HealthController(OmniSiftDbContext dbContext, ILogger<HealthController> logger)
-    {
-        _dbContext = dbContext;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Health check endpoint. Returns service status and database connectivity.
     /// Exempt from tenant middleware — no X-Tenant-Id header required.
@@ -33,11 +26,11 @@ public sealed class HealthController : ControllerBase
 
         try
         {
-            dbHealthy = await _dbContext.Database.CanConnectAsync(cancellationToken);
+            dbHealthy = await dbContext.Database.CanConnectAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Database health check failed");
+            logger.LogWarning(ex, "Database health check failed");
         }
 
         var status = dbHealthy ? "healthy" : "degraded";

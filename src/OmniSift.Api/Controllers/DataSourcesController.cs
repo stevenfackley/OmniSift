@@ -3,10 +3,13 @@
 // Manages file uploads, web ingestion, and data source CRUD
 // ============================================================
 
+using System.Collections.Frozen;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using OmniSift.Api.Data;
 using OmniSift.Api.Middleware;
+using OmniSift.Api.Models;
 using OmniSift.Api.Services;
 using OmniSift.Shared.DTOs;
 
@@ -14,13 +17,13 @@ namespace OmniSift.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public sealed class DataSourcesController : ControllerBase
+[EnableRateLimiting("per-tenant")]
+public sealed class DataSourcesController(
+    OmniSiftDbContext dbContext,
+    ITenantContext tenantContext,
+    IDocumentIngestionService ingestionService,
+    ILogger<DataSourcesController> logger) : ControllerBase
 {
-    private readonly OmniSiftDbContext _dbContext;
-    private readonly ITenantContext _tenantContext;
-    private readonly IDocumentIngestionService _ingestionService;
-    private readonly ILogger<DataSourcesController> _logger;
-
     /// <summary>
     /// Maximum upload file size (50 MB).
     /// </summary>
@@ -28,26 +31,16 @@ public sealed class DataSourcesController : ControllerBase
 
     /// <summary>
     /// Allowed MIME types for file uploads.
+    /// FrozenDictionary provides optimised read-only lookups for this static mapping.
     /// </summary>
-    private static readonly Dictionary<string, string> AllowedMimeTypes = new()
-    {
-        ["application/pdf"] = "pdf",
-        ["text/csv"] = "sms",
-        ["application/json"] = "sms",
-        ["text/html"] = "web"
-    };
-
-    public DataSourcesController(
-        OmniSiftDbContext dbContext,
-        ITenantContext tenantContext,
-        IDocumentIngestionService ingestionService,
-        ILogger<DataSourcesController> logger)
-    {
-        _dbContext = dbContext;
-        _tenantContext = tenantContext;
-        _ingestionService = ingestionService;
-        _logger = logger;
-    }
+    private static readonly FrozenDictionary<string, string> AllowedMimeTypes =
+        new Dictionary<string, string>
+        {
+            ["application/pdf"] = "pdf",
+            ["text/csv"] = "sms",
+            ["application/json"] = "sms",
+            ["text/html"] = "web"
+        }.ToFrozenDictionary();
 
     /// <summary>
     /// Upload a file for ingestion into the document pipeline.
@@ -86,30 +79,22 @@ public sealed class DataSourcesController : ControllerBase
             }
         }
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Upload request: file={FileName}, size={Size}, type={SourceType}, tenant={TenantId}",
-            file.FileName, file.Length, resolvedSourceType, _tenantContext.TenantId);
+            file.FileName, file.Length, resolvedSourceType, tenantContext.TenantId);
 
-        try
-        {
-            using var stream = file.OpenReadStream();
-            var dataSource = await _ingestionService.IngestAsync(
-                stream, resolvedSourceType, file.FileName, cancellationToken: cancellationToken);
+        using var stream = file.OpenReadStream();
+        var dataSource = await ingestionService.IngestAsync(
+            stream, resolvedSourceType, file.FileName, cancellationToken: cancellationToken);
 
-            return Ok(new IngestionResponse
-            {
-                DataSourceId = dataSource.Id,
-                Status = dataSource.Status,
-                Message = dataSource.Status == "completed"
-                    ? "File uploaded and processed successfully."
-                    : $"Ingestion {dataSource.Status}: {dataSource.ErrorMessage}"
-            });
-        }
-        catch (Exception ex)
+        return Ok(new IngestionResponse
         {
-            _logger.LogError(ex, "Upload failed for file {FileName}", file.FileName);
-            return StatusCode(500, new { error = "An error occurred during file processing.", details = ex.Message });
-        }
+            DataSourceId = dataSource.Id,
+            Status = dataSource.Status.ToString().ToLowerInvariant(),
+            Message = dataSource.Status == IngestionStatus.Completed
+                ? "File uploaded and processed successfully."
+                : $"Ingestion {dataSource.Status.ToString().ToLowerInvariant()}: {dataSource.ErrorMessage}"
+        });
     }
 
     /// <summary>
@@ -124,40 +109,27 @@ public sealed class DataSourcesController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Web ingestion request: url={Url}, tenant={TenantId}",
-            request.Url, _tenantContext.TenantId);
+            request.Url, tenantContext.TenantId);
 
-        try
-        {
-            // Fetch the web page
-            var httpClient = httpClientFactory.CreateClient();
-            var response = await httpClient.GetAsync(request.Url, cancellationToken);
-            response.EnsureSuccessStatusCode();
+        // Fetch the web page — HttpRequestException propagates to GlobalExceptionHandler (502)
+        var httpClient = httpClientFactory.CreateClient();
+        var response = await httpClient.GetAsync(request.Url, cancellationToken);
+        response.EnsureSuccessStatusCode();
 
-            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            var dataSource = await _ingestionService.IngestAsync(
-                stream, "web", null, request.Url, cancellationToken);
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var dataSource = await ingestionService.IngestAsync(
+            stream, "web", null, request.Url, cancellationToken);
 
-            return Ok(new IngestionResponse
-            {
-                DataSourceId = dataSource.Id,
-                Status = dataSource.Status,
-                Message = dataSource.Status == "completed"
-                    ? "Web page ingested successfully."
-                    : $"Ingestion {dataSource.Status}: {dataSource.ErrorMessage}"
-            });
-        }
-        catch (HttpRequestException ex)
+        return Ok(new IngestionResponse
         {
-            _logger.LogError(ex, "Failed to fetch URL: {Url}", request.Url);
-            return BadRequest(new { error = $"Could not fetch URL: {ex.Message}" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Web ingestion failed for URL: {Url}", request.Url);
-            return StatusCode(500, new { error = "An error occurred during web ingestion.", details = ex.Message });
-        }
+            DataSourceId = dataSource.Id,
+            Status = dataSource.Status.ToString().ToLowerInvariant(),
+            Message = dataSource.Status == IngestionStatus.Completed
+                ? "Web page ingested successfully."
+                : $"Ingestion {dataSource.Status.ToString().ToLowerInvariant()}: {dataSource.ErrorMessage}"
+        });
     }
 
     /// <summary>
@@ -166,23 +138,25 @@ public sealed class DataSourcesController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<DataSourceDto>>> List(CancellationToken cancellationToken)
     {
-        var sources = await _dbContext.DataSources
-            .Where(ds => ds.TenantId == _tenantContext.TenantId)
+        var entities = await dbContext.DataSources
+            .Where(ds => ds.TenantId == tenantContext.TenantId)
             .OrderByDescending(ds => ds.CreatedAt)
-            .Select(ds => new DataSourceDto
-            {
-                Id = ds.Id,
-                SourceType = ds.SourceType,
-                FileName = ds.FileName,
-                OriginalUrl = ds.OriginalUrl,
-                Status = ds.Status,
-                ErrorMessage = ds.ErrorMessage,
-                Metadata = ds.Metadata,
-                CreatedAt = ds.CreatedAt,
-                UpdatedAt = ds.UpdatedAt,
-                ChunkCount = ds.Chunks.Count
-            })
+            .Include(ds => ds.Chunks)
             .ToListAsync(cancellationToken);
+
+        var sources = entities.Select(ds => new DataSourceDto
+        {
+            Id = ds.Id,
+            SourceType = ds.SourceType,
+            FileName = ds.FileName,
+            OriginalUrl = ds.OriginalUrl,
+            Status = ds.Status.ToString().ToLowerInvariant(),
+            ErrorMessage = ds.ErrorMessage,
+            Metadata = ds.Metadata,
+            CreatedAt = ds.CreatedAt,
+            UpdatedAt = ds.UpdatedAt,
+            ChunkCount = ds.Chunks.Count
+        }).ToList();
 
         return Ok(sources);
     }
@@ -193,25 +167,28 @@ public sealed class DataSourcesController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<DataSourceDto>> Get(Guid id, CancellationToken cancellationToken)
     {
-        var source = await _dbContext.DataSources
-            .Where(ds => ds.TenantId == _tenantContext.TenantId && ds.Id == id)
-            .Select(ds => new DataSourceDto
-            {
-                Id = ds.Id,
-                SourceType = ds.SourceType,
-                FileName = ds.FileName,
-                OriginalUrl = ds.OriginalUrl,
-                Status = ds.Status,
-                ErrorMessage = ds.ErrorMessage,
-                Metadata = ds.Metadata,
-                CreatedAt = ds.CreatedAt,
-                UpdatedAt = ds.UpdatedAt,
-                ChunkCount = ds.Chunks.Count
-            })
-            .FirstOrDefaultAsync(cancellationToken);
+        var ds = await dbContext.DataSources
+            .Include(ds => ds.Chunks)
+            .FirstOrDefaultAsync(
+                ds => ds.TenantId == tenantContext.TenantId && ds.Id == id,
+                cancellationToken);
 
-        if (source is null)
+        if (ds is null)
             return NotFound(new { error = $"Data source '{id}' not found." });
+
+        var source = new DataSourceDto
+        {
+            Id = ds.Id,
+            SourceType = ds.SourceType,
+            FileName = ds.FileName,
+            OriginalUrl = ds.OriginalUrl,
+            Status = ds.Status.ToString().ToLowerInvariant(),
+            ErrorMessage = ds.ErrorMessage,
+            Metadata = ds.Metadata,
+            CreatedAt = ds.CreatedAt,
+            UpdatedAt = ds.UpdatedAt,
+            ChunkCount = ds.Chunks.Count
+        };
 
         return Ok(source);
     }
@@ -222,18 +199,18 @@ public sealed class DataSourcesController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var source = await _dbContext.DataSources
-            .FirstOrDefaultAsync(ds => ds.TenantId == _tenantContext.TenantId && ds.Id == id, cancellationToken);
+        var source = await dbContext.DataSources
+            .FirstOrDefaultAsync(ds => ds.TenantId == tenantContext.TenantId && ds.Id == id, cancellationToken);
 
         if (source is null)
             return NotFound(new { error = $"Data source '{id}' not found." });
 
-        _dbContext.DataSources.Remove(source);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        dbContext.DataSources.Remove(source);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Deleted DataSource {DataSourceId} for tenant {TenantId}",
-            id, _tenantContext.TenantId);
+            id, tenantContext.TenantId);
 
         return NoContent();
     }

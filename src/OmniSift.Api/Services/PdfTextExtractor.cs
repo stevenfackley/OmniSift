@@ -12,15 +12,8 @@ namespace OmniSift.Api.Services;
 /// Extracts text from PDF documents page-by-page using PdfPig.
 /// Concatenates pages with page markers for metadata tracking.
 /// </summary>
-public sealed class PdfTextExtractor : ITextExtractor
+public sealed class PdfTextExtractor(ILogger<PdfTextExtractor> logger) : ITextExtractor
 {
-    private readonly ILogger<PdfTextExtractor> _logger;
-
-    public PdfTextExtractor(ILogger<PdfTextExtractor> logger)
-    {
-        _logger = logger;
-    }
-
     /// <inheritdoc />
     public string SourceType => "pdf";
 
@@ -32,7 +25,7 @@ public sealed class PdfTextExtractor : ITextExtractor
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        _logger.LogDebug("Extracting text from PDF: {FileName}", fileName ?? "unknown");
+        logger.LogDebug("Extracting text from PDF: {FileName}", fileName ?? "unknown");
 
         // PdfPig requires a seekable stream; buffer if needed
         using var memoryStream = new MemoryStream();
@@ -57,11 +50,11 @@ public sealed class PdfTextExtractor : ITextExtractor
 
         if (pages.Count == 0)
         {
-            _logger.LogWarning("No text extracted from PDF: {FileName}", fileName ?? "unknown");
+            logger.LogWarning("No text extracted from PDF: {FileName}", fileName ?? "unknown");
             return string.Empty;
         }
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Extracted text from {PageCount} pages of PDF: {FileName}",
             pages.Count, fileName ?? "unknown");
 

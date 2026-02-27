@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/steve/projects/OmniSift/tests -not -path '*/bin/*' -not -path '*/obj/*' -not -path '*/\\\\.*' | sort && find /home/steve/projects/OmniSift/src/OmniSift.Web -not -path '*/bin/*' -not -path '*/obj/*' -not -path '*/\\\\.*' 2>/dev/null | sort | head -40)",
+      "Bash(git add .gitignore infra/ docker-compose.yml && git rm db/init.sql && git commit -m \"$\\(cat <<'EOF'\nrefactor: move db scripts under infra/ for cleaner root structure\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)",
+      "Bash(git add -A && git commit -m \"$\\(cat <<'EOF'\nrefactor: move design docs into docs/ folder\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)",
+      "Bash(git add README.md && git commit -m \"$\\(cat <<'EOF'\ndocs: update README links and project tree to reflect new layout\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)",
+      "Bash(dotnet sln list)",
+      "Bash(git add OmniSift.sln && git commit -m \"$\\(cat <<'EOF'\nchore: normalize sln project paths to forward slashes\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>\nEOF\n\\)\" && git push)",
+      "Bash(dotnet build OmniSift.sln 2>&1)",
+      "Bash(dotnet test OmniSift.sln 2>&1)"
+    ]
+  }
+}

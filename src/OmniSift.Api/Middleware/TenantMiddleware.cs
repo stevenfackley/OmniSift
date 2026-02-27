@@ -14,21 +14,12 @@ namespace OmniSift.Api.Middleware;
 /// validates the tenant exists and is active, and sets the PostgreSQL
 /// session variable 'app.current_tenant' for Row-Level Security enforcement.
 /// </summary>
-public sealed class TenantMiddleware
+public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> logger)
 {
-    private readonly RequestDelegate _next;
-    private readonly ILogger<TenantMiddleware> _logger;
-
     /// <summary>
     /// Header name used to identify the current tenant.
     /// </summary>
     public const string TenantHeaderName = "X-Tenant-Id";
-
-    public TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> logger)
-    {
-        _next = next;
-        _logger = logger;
-    }
 
     public async Task InvokeAsync(HttpContext context, OmniSiftDbContext dbContext)
     {
@@ -36,7 +27,7 @@ public sealed class TenantMiddleware
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
         if (path.StartsWith("/api/health") || path.StartsWith("/swagger"))
         {
-            await _next(context);
+            await next(context);
             return;
         }
 
@@ -44,7 +35,7 @@ public sealed class TenantMiddleware
         if (!context.Request.Headers.TryGetValue(TenantHeaderName, out var tenantHeader) ||
             !Guid.TryParse(tenantHeader.FirstOrDefault(), out var tenantId))
         {
-            _logger.LogWarning("Request missing or invalid {Header} header from {RemoteIp}",
+            logger.LogWarning("Request missing or invalid {Header} header from {RemoteIp}",
                 TenantHeaderName, context.Connection.RemoteIpAddress);
 
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
@@ -63,7 +54,7 @@ public sealed class TenantMiddleware
         // Skip for non-relational providers (e.g., InMemory during testing).
         if (!dbContext.Database.IsRelational())
         {
-            await _next(context);
+            await next(context);
             return;
         }
 
@@ -85,17 +76,17 @@ public sealed class TenantMiddleware
             command.Parameters.Add(param);
             await command.ExecuteNonQueryAsync(context.RequestAborted);
 
-            _logger.LogDebug("Tenant context set to {TenantId}", tenantId);
+            logger.LogDebug("Tenant context set to {TenantId}", tenantId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to set tenant context for {TenantId}", tenantId);
+            logger.LogError(ex, "Failed to set tenant context for {TenantId}", tenantId);
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             await context.Response.WriteAsJsonAsync(new { error = "Failed to establish tenant context." });
             return;
         }
 
-        await _next(context);
+        await next(context);
     }
 }
 

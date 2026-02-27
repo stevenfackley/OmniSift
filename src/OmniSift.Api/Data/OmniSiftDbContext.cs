@@ -62,7 +62,16 @@ public class OmniSiftDbContext : DbContext
             entity.Property(e => e.SourceType).HasColumnName("source_type").HasMaxLength(50).IsRequired();
             entity.Property(e => e.FileName).HasColumnName("file_name").HasMaxLength(512);
             entity.Property(e => e.OriginalUrl).HasColumnName("original_url").HasMaxLength(2048);
-            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(50).HasDefaultValue("pending");
+
+            // IngestionStatus stored as lowercase string for DB compatibility
+            entity.Property(e => e.Status)
+                .HasColumnName("status")
+                .HasMaxLength(50)
+                .HasConversion(
+                    v => v.ToString().ToLowerInvariant(),
+                    v => Enum.Parse<IngestionStatus>(v, ignoreCase: true))
+                .HasDefaultValue(IngestionStatus.Pending);
+
             entity.Property(e => e.ErrorMessage).HasColumnName("error_message");
             entity.Property(e => e.Metadata).HasColumnName("metadata").HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb")
                 .HasConversion(JsonDictionaryConverter);

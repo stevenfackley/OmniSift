@@ -20,25 +20,12 @@ namespace OmniSift.Api.Plugins;
 /// against the tenant's document chunks. The agent invokes this
 /// to retrieve relevant information from uploaded documents.
 /// </summary>
-public sealed class VectorSearchPlugin
+public sealed class VectorSearchPlugin(
+    OmniSiftDbContext dbContext,
+    ITenantContext tenantContext,
+    IEmbeddingService embeddingService,
+    ILogger<VectorSearchPlugin> logger)
 {
-    private readonly OmniSiftDbContext _dbContext;
-    private readonly ITenantContext _tenantContext;
-    private readonly IEmbeddingService _embeddingService;
-    private readonly ILogger<VectorSearchPlugin> _logger;
-
-    public VectorSearchPlugin(
-        OmniSiftDbContext dbContext,
-        ITenantContext tenantContext,
-        IEmbeddingService embeddingService,
-        ILogger<VectorSearchPlugin> logger)
-    {
-        _dbContext = dbContext;
-        _tenantContext = tenantContext;
-        _embeddingService = embeddingService;
-        _logger = logger;
-    }
-
     [KernelFunction("SearchDocuments")]
     [Description("Searches the tenant's uploaded documents for information relevant to the query. " +
                  "Returns the most semantically similar text chunks with metadata including source file names and relevance scores.")]
@@ -51,17 +38,17 @@ public sealed class VectorSearchPlugin
 
         topK = Math.Clamp(topK, 1, 20);
 
-        _logger.LogDebug("VectorSearch: query='{Query}', topK={TopK}, tenant={TenantId}",
-            query, topK, _tenantContext.TenantId);
+        logger.LogDebug("VectorSearch: query='{Query}', topK={TopK}, tenant={TenantId}",
+            query, topK, tenantContext.TenantId);
 
         try
         {
             // Generate query embedding
-            var queryEmbedding = await _embeddingService.GenerateEmbeddingAsync(query);
+            var queryEmbedding = await embeddingService.GenerateEmbeddingAsync(query);
 
             // Perform cosine similarity search
-            var results = await _dbContext.DocumentChunks
-                .Where(c => c.TenantId == _tenantContext.TenantId)
+            var results = await dbContext.DocumentChunks
+                .Where(c => c.TenantId == tenantContext.TenantId)
                 .Where(c => c.Embedding != null)
                 .OrderBy(c => c.Embedding!.CosineDistance(queryEmbedding))
                 .Take(topK)
@@ -94,15 +81,15 @@ public sealed class VectorSearchPlugin
                 content = r.Content
             });
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "VectorSearch returned {Count} results for query in tenant {TenantId}",
-                results.Count, _tenantContext.TenantId);
+                results.Count, tenantContext.TenantId);
 
             return JsonSerializer.Serialize(formattedResults, new JsonSerializerOptions { WriteIndented = true });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "VectorSearch failed for tenant {TenantId}", _tenantContext.TenantId);
+            logger.LogError(ex, "VectorSearch failed for tenant {TenantId}", tenantContext.TenantId);
             return $"Error searching documents: {ex.Message}";
         }
     }

@@ -34,9 +34,9 @@ public sealed class DataSource
     public string? OriginalUrl { get; set; }
 
     /// <summary>
-    /// Processing status: "pending", "processing", "completed", "failed".
+    /// Processing status. Stored as a lowercase string in the database via EF value conversion.
     /// </summary>
-    public string Status { get; set; } = "pending";
+    public IngestionStatus Status { get; set; } = IngestionStatus.Pending;
 
     /// <summary>
     /// Error message if processing failed.

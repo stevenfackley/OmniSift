@@ -13,15 +13,8 @@ namespace OmniSift.Api.Services;
 /// CSV format: sender,timestamp,message (with header row)
 /// JSON format: Array of { sender, timestamp, message } objects
 /// </summary>
-public sealed class SmsTextExtractor : ITextExtractor
+public sealed class SmsTextExtractor(ILogger<SmsTextExtractor> logger) : ITextExtractor
 {
-    private readonly ILogger<SmsTextExtractor> _logger;
-
-    public SmsTextExtractor(ILogger<SmsTextExtractor> logger)
-    {
-        _logger = logger;
-    }
-
     /// <inheritdoc />
     public string SourceType => "sms";
 
@@ -33,14 +26,14 @@ public sealed class SmsTextExtractor : ITextExtractor
     {
         ArgumentNullException.ThrowIfNull(stream);
 
-        _logger.LogDebug("Extracting text from SMS export: {FileName}", fileName ?? "unknown");
+        logger.LogDebug("Extracting text from SMS export: {FileName}", fileName ?? "unknown");
 
         using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
         var content = await reader.ReadToEndAsync(cancellationToken);
 
         if (string.IsNullOrWhiteSpace(content))
         {
-            _logger.LogWarning("Empty SMS export: {FileName}", fileName ?? "unknown");
+            logger.LogWarning("Empty SMS export: {FileName}", fileName ?? "unknown");
             return string.Empty;
         }
 
@@ -84,7 +77,7 @@ public sealed class SmsTextExtractor : ITextExtractor
                 }
             }
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Parsed {Count} SMS messages from JSON: {FileName}",
                 messages.Count, fileName ?? "unknown");
 
@@ -94,7 +87,7 @@ public sealed class SmsTextExtractor : ITextExtractor
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Failed to parse SMS JSON: {FileName}", fileName ?? "unknown");
+            logger.LogError(ex, "Failed to parse SMS JSON: {FileName}", fileName ?? "unknown");
             throw new InvalidOperationException($"Failed to parse SMS JSON file: {ex.Message}", ex);
         }
     }
@@ -105,7 +98,7 @@ public sealed class SmsTextExtractor : ITextExtractor
 
         if (lines.Length <= 1)
         {
-            _logger.LogWarning("CSV has no data rows: {FileName}", fileName ?? "unknown");
+            logger.LogWarning("CSV has no data rows: {FileName}", fileName ?? "unknown");
             return string.Empty;
         }
 
@@ -144,7 +137,7 @@ public sealed class SmsTextExtractor : ITextExtractor
             }
         }
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Parsed {Count} SMS messages from CSV: {FileName}",
             messages.Count, fileName ?? "unknown");
 

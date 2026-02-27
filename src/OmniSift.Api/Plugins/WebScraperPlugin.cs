@@ -7,7 +7,9 @@ using System.ComponentModel;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
+using OmniSift.Api.Options;
 
 namespace OmniSift.Api.Plugins;
 
@@ -16,21 +18,12 @@ namespace OmniSift.Api.Plugins;
 /// The agent invokes this to find current information not available
 /// in the tenant's uploaded documents.
 /// </summary>
-public sealed class WebScraperPlugin
+public sealed class WebScraperPlugin(
+    HttpClient httpClient,
+    IOptions<TavilyOptions> tavilyOptions,
+    ILogger<WebScraperPlugin> logger)
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<WebScraperPlugin> _logger;
-    private readonly string _apiKey;
-
-    public WebScraperPlugin(
-        HttpClient httpClient,
-        IConfiguration configuration,
-        ILogger<WebScraperPlugin> logger)
-    {
-        _httpClient = httpClient;
-        _logger = logger;
-        _apiKey = configuration["Tavily:ApiKey"] ?? string.Empty;
-    }
+    private readonly string _apiKey = tavilyOptions.Value.ApiKey;
 
     [KernelFunction("SearchWeb")]
     [Description("Searches the web for current information related to the query. " +
@@ -45,13 +38,13 @@ public sealed class WebScraperPlugin
 
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
-            _logger.LogWarning("Tavily API key not configured; web search unavailable");
+            logger.LogWarning("Tavily API key not configured; web search unavailable");
             return "Web search is not available — API key not configured.";
         }
 
         maxResults = Math.Clamp(maxResults, 1, 10);
 
-        _logger.LogDebug("WebSearch: query='{Query}', maxResults={MaxResults}", query, maxResults);
+        logger.LogDebug("WebSearch: query='{Query}', maxResults={MaxResults}", query, maxResults);
 
         try
         {
@@ -64,7 +57,7 @@ public sealed class WebScraperPlugin
                 IncludeAnswer = true
             };
 
-            var response = await _httpClient.PostAsJsonAsync(
+            var response = await httpClient.PostAsJsonAsync(
                 "https://api.tavily.com/search",
                 request);
 
@@ -90,13 +83,13 @@ public sealed class WebScraperPlugin
                 })
             };
 
-            _logger.LogInformation("WebSearch returned {Count} results for query", result.Results.Count);
+            logger.LogInformation("WebSearch returned {Count} results for query", result.Results.Count);
 
             return JsonSerializer.Serialize(formattedResults, new JsonSerializerOptions { WriteIndented = true });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "WebSearch failed for query: {Query}", query);
+            logger.LogError(ex, "WebSearch failed for query: {Query}", query);
             return $"Error performing web search: {ex.Message}";
         }
     }
