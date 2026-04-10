@@ -251,6 +251,12 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<OmniSiftDbContext>();
+    dbContext.Database.Migrate();
+}
+
 // ── Middleware Pipeline ──────────────────────────────────────
 app.UseExceptionHandler();
 
@@ -271,10 +277,10 @@ app.UseSerilogRequestLogging(opts =>
 {
     opts.EnrichDiagnosticContext = (diag, http) =>
     {
-        diag.Set("RequestHost", http.Request.Host.Value);
-        diag.Set("RequestScheme", http.Request.Scheme);
+        diag.Set("RequestHost", http.Request.Host.Value ?? string.Empty);
+        diag.Set("RequestScheme", http.Request.Scheme ?? string.Empty);
         if (http.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
-            diag.Set("CorrelationId", cid);
+            diag.Set("CorrelationId", cid?.ToString() ?? string.Empty);
     };
 });
 
