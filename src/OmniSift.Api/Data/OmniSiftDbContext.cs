@@ -50,6 +50,9 @@ public class OmniSiftDbContext : DbContext
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
 
             entity.HasIndex(e => e.Slug).IsUnique();
+
+            entity.Property(e => e.ApiKeyHash).HasColumnName("api_key_hash").HasMaxLength(64).IsRequired();
+            entity.HasIndex(e => e.ApiKeyHash).IsUnique();
         });
 
         // ── DataSource ──────────────────────────────────

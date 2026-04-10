@@ -24,6 +24,12 @@ public sealed class Tenant
     public string Slug { get; set; } = string.Empty;
 
     /// <summary>
+    /// SHA-256 hex digest of the tenant's API key.
+    /// The raw key is never stored.
+    /// </summary>
+    public string ApiKeyHash { get; set; } = string.Empty;
+
+    /// <summary>
     /// Whether the tenant account is active.
     /// </summary>
     public bool IsActive { get; set; } = true;

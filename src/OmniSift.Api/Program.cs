@@ -15,8 +15,35 @@ using OmniSift.Api.Options;
 using OmniSift.Api.Plugins;
 using OmniSift.Api.Services;
 using OmniSift.Shared;
+using Serilog;
+using Serilog.Events;
+
+// ── Serilog Bootstrap Logger ─────────────────────────────────
+// Used only during host startup (before DI is ready). Replaced
+// by the full logger configured in UseSerilog() below.
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
+
+try
+{
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ── Serilog Full Configuration ───────────────────────────────
+// Replaces the bootstrap logger. JSON console output for
+// structured ingestion; CorrelationId enriched from LogContext.
+builder.Host.UseSerilog((ctx, services, cfg) => cfg
+    .ReadFrom.Configuration(ctx.Configuration)
+    .ReadFrom.Services(services)
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .Enrich.WithCorrelationIdHeader(CorrelationIdMiddleware.HeaderName)
+    .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter()));
 
 // ── Docker Secrets ───────────────────────────────────────────
 // In production, docker-compose.prod.yml mounts secrets as files under /run/secrets/.
@@ -201,8 +228,29 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Correlation ID must be first so every subsequent log line
+// and response carries the ID.
+app.UseCorrelationId();
+
+// Serilog request logging replaces the default ASP.NET request
+// log; emits one structured line per request with duration,
+// status code, and CorrelationId from LogContext.
+app.UseSerilogRequestLogging(opts =>
+{
+    opts.EnrichDiagnosticContext = (diag, http) =>
+    {
+        diag.Set("RequestHost", http.Request.Host.Value);
+        diag.Set("RequestScheme", http.Request.Scheme);
+        if (http.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
+            diag.Set("CorrelationId", cid);
+    };
+});
+
 app.UseCors();
 app.UseRateLimiter();
+
+// API key authentication (must run before tenant resolution)
+app.UseApiKeyAuth();
 
 // Tenant resolution middleware (sets RLS session variable)
 app.UseTenantMiddleware();
@@ -210,6 +258,16 @@ app.UseTenantMiddleware();
 app.MapControllers();
 
 app.Run();
+
+} // end try
+catch (Exception ex) when (ex is not HostAbortedException)
+{
+    Log.Fatal(ex, "OmniSift host terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 // Make Program accessible for integration tests
 public partial class Program { }
