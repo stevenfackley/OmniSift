@@ -30,7 +30,7 @@ OmniSift is an agentic research application that aggregates, parses, and synthes
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) & [Docker Compose](https://docs.docker.com/compose/install/)
-- (Optional) [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) for local development
+- (Optional) [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) for local development and test execution
 
 ### 1. Clone & Configure
 
@@ -139,14 +139,12 @@ All ingested data is chunked (500 tokens, 50-token overlap), embedded via OpenAI
 ## 🧪 Testing
 
 ```bash
-# Run all tests
-dotnet test OmniSift.sln
+# Run the reproducible repo-owned test path
+pwsh ./scripts/run-tests.ps1
 
-# Run unit tests only
-dotnet test tests/OmniSift.UnitTests/
-
-# Run integration tests only
-dotnet test tests/OmniSift.IntegrationTests/
+# Or run the projects directly
+dotnet test tests/OmniSift.UnitTests/OmniSift.UnitTests.csproj -f net10.0
+dotnet test tests/OmniSift.IntegrationTests/OmniSift.IntegrationTests.csproj -f net10.0
 ```
 
 ## 📝 Documentation
