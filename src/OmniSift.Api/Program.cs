@@ -8,6 +8,9 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using OmniSift.Api.Data;
 using OmniSift.Api.Infrastructure;
 using OmniSift.Api.Middleware;
@@ -67,6 +70,35 @@ builder.Services.Configure<OmniSift.Api.Options.CorsOptions>(
 // ── Global Exception Handler + ProblemDetails ────────────────
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddHealthChecks();
+
+var omniSiftOtlpEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("OmniSift.Api"))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        if (builder.Environment.IsDevelopment() || string.IsNullOrWhiteSpace(omniSiftOtlpEndpoint))
+            tracing.AddConsoleExporter();
+
+        if (!string.IsNullOrWhiteSpace(omniSiftOtlpEndpoint))
+            tracing.AddOtlpExporter();
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        if (builder.Environment.IsDevelopment() || string.IsNullOrWhiteSpace(omniSiftOtlpEndpoint))
+            metrics.AddConsoleExporter();
+
+        if (!string.IsNullOrWhiteSpace(omniSiftOtlpEndpoint))
+            metrics.AddOtlpExporter();
+    });
 
 // ── Database ────────────────────────────────────────────────
 builder.Services.AddDbContext<OmniSiftDbContext>(options =>
@@ -256,6 +288,7 @@ app.UseApiKeyAuth();
 app.UseTenantMiddleware();
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();
 
