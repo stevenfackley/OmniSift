@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.SemanticKernel;
 using Moq;
 using OmniSift.Api.Data;
@@ -90,25 +91,32 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.AddSingleton<Func<Kernel>>(_ => () => Kernel.CreateBuilder().Build());
             services.AddScoped(_ => Kernel.CreateBuilder().Build());
 
-            // Seed the test database
-            var sp = services.BuildServiceProvider();
-            using var scope = sp.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<OmniSiftDbContext>();
-            db.Database.EnsureCreated();
-
-            // Add test tenant
-            if (!db.Tenants.Any(t => t.Id == TestTenantId))
-            {
-                db.Tenants.Add(new Api.Models.Tenant
-                {
-                    Id = TestTenantId,
-                    Name = "Test Tenant",
-                    Slug = "test",
-                    IsActive = true
-                });
-                db.SaveChanges();
-            }
         });
+    }
+
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+
+        // Seed the test database after the host is fully built so Serilog's
+        // ReloadableLogger is not frozen prematurely by a premature BuildServiceProvider call.
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<OmniSiftDbContext>();
+        db.Database.EnsureCreated();
+
+        if (!db.Tenants.Any(t => t.Id == TestTenantId))
+        {
+            db.Tenants.Add(new Tenant
+            {
+                Id = TestTenantId,
+                Name = "Test Tenant",
+                Slug = "test",
+                IsActive = true
+            });
+            db.SaveChanges();
+        }
+
+        return host;
     }
 
     /// <summary>
