@@ -38,15 +38,21 @@ var builder = WebApplication.CreateBuilder(args);
 // ── Serilog Full Configuration ───────────────────────────────
 // Replaces the bootstrap logger. JSON console output for
 // structured ingestion; CorrelationId enriched from LogContext.
-builder.Host.UseSerilog((ctx, services, cfg) => cfg
-    .ReadFrom.Configuration(ctx.Configuration)
-    .ReadFrom.Services(services)
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
-    .MinimumLevel.Override("System", LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .Enrich.WithCorrelationIdHeader(CorrelationIdMiddleware.HeaderName)
-    .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter()));
+// Skipped in Testing — the bootstrap ReloadableLogger is a process-level
+// static and freezes on first host build; subsequent factory instances
+// in integration tests would fail with "logger already frozen".
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Host.UseSerilog((ctx, services, cfg) => cfg
+        .ReadFrom.Configuration(ctx.Configuration)
+        .ReadFrom.Services(services)
+        .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
+        .MinimumLevel.Override("System", LogEventLevel.Warning)
+        .Enrich.FromLogContext()
+        .Enrich.WithCorrelationIdHeader(CorrelationIdMiddleware.HeaderName)
+        .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter()));
+}
 
 // ── Docker Secrets ───────────────────────────────────────────
 // In production, docker-compose.prod.yml mounts secrets as files under /run/secrets/.
@@ -251,8 +257,12 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+// Skip relational Migrate() in Testing — integration tests use InMemory
+// which doesn't support Migrate(). Seeding is handled by CreateHost override
+// in CustomWebApplicationFactory.
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<OmniSiftDbContext>();
     dbContext.Database.Migrate();
 }
