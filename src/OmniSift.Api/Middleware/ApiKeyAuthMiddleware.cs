@@ -19,7 +19,7 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, ILogger<ApiKeyAut
     public async Task InvokeAsync(HttpContext context, OmniSiftDbContext dbContext)
     {
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
-        if (path.StartsWith("/api/health") || path.StartsWith("/swagger"))
+        if (path.StartsWith("/health") || path.StartsWith("/api/health") || path.StartsWith("/swagger"))
         {
             await next(context);
             return;

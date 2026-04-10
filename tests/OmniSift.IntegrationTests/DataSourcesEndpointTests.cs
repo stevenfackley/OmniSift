@@ -30,12 +30,12 @@ public sealed class DataSourcesEndpointTests : IClassFixture<CustomWebApplicatio
     }
 
     [Fact]
-    public async Task ListDataSources_WithoutTenantHeader_Returns400()
+    public async Task ListDataSources_WithoutTenantHeader_Returns401()
     {
         var client = _factory.CreateClient(); // No tenant header
         var response = await client.GetAsync("/api/datasources");
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
@@ -78,12 +78,11 @@ public sealed class DataSourcesEndpointTests : IClassFixture<CustomWebApplicatio
         // Create client with a different (non-existent) tenant
         var otherClient = _factory.CreateClient();
         otherClient.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
+        otherClient.DefaultRequestHeaders.Add("X-API-Key", CustomWebApplicationFactory.TestApiKey);
 
         var response = await otherClient.GetAsync("/api/datasources");
 
-        // Should return 200 with empty results (tenant exists check happens at middleware level
-        // but RLS would filter data; in-memory DB doesn't enforce RLS so we verify the concept)
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

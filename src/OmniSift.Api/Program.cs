@@ -283,16 +283,19 @@ app.UseCorrelationId();
 // Serilog request logging replaces the default ASP.NET request
 // log; emits one structured line per request with duration,
 // status code, and CorrelationId from LogContext.
-app.UseSerilogRequestLogging(opts =>
+if (!app.Environment.IsEnvironment("Testing"))
 {
-    opts.EnrichDiagnosticContext = (diag, http) =>
+    app.UseSerilogRequestLogging(opts =>
     {
-        diag.Set("RequestHost", http.Request.Host.Value ?? string.Empty);
-        diag.Set("RequestScheme", http.Request.Scheme ?? string.Empty);
-        if (http.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
-            diag.Set("CorrelationId", cid?.ToString() ?? string.Empty);
-    };
-});
+        opts.EnrichDiagnosticContext = (diag, http) =>
+        {
+            diag.Set("RequestHost", http.Request.Host.Value ?? string.Empty);
+            diag.Set("RequestScheme", http.Request.Scheme ?? string.Empty);
+            if (http.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
+                diag.Set("CorrelationId", cid?.ToString() ?? string.Empty);
+        };
+    });
+}
 
 app.UseCors();
 app.UseRateLimiter();

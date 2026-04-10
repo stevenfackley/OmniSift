@@ -15,6 +15,8 @@ using OmniSift.Api.Data;
 using OmniSift.Api.Models;
 using OmniSift.Api.Services;
 using Pgvector;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace OmniSift.IntegrationTests;
 
@@ -28,6 +30,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     /// Dev tenant ID used in tests (matches db/init.sql seed).
     /// </summary>
     public static readonly Guid TestTenantId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+    public const string TestApiKey = "omnisift-test-key";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -111,6 +114,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 Id = TestTenantId,
                 Name = "Test Tenant",
                 Slug = "test",
+                ApiKeyHash = HashApiKey(TestApiKey),
                 IsActive = true
             });
             db.SaveChanges();
@@ -126,7 +130,14 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     {
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("X-Tenant-Id", TestTenantId.ToString());
+        client.DefaultRequestHeaders.Add("X-API-Key", TestApiKey);
         return client;
+    }
+
+    private static string HashApiKey(string rawKey)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(rawKey));
+        return Convert.ToHexStringLower(bytes);
     }
 
     /// <summary>
