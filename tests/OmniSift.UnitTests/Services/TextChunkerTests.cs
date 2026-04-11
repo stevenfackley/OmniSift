@@ -150,8 +150,8 @@ public sealed class TextChunkerTests
 
         // With 1200 tokens, chunk_size=500, overlap=50, stride=450
         // Expected: ceil((1200 - 500) / 450) + 1 ≈ 3 chunks
-        result.Should().HaveCountGreaterOrEqualTo(2);
-        result[0].TokenCount.Should().BeLessOrEqualTo(500);
+        result.Should().HaveCountGreaterThanOrEqualTo(2);
+        result[0].TokenCount.Should().BeLessThanOrEqualTo(500);
     }
 
     [Fact]
