@@ -5,7 +5,7 @@
 # ============================================================
 
 # ── Build Stage ──────────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0-preview AS build
 WORKDIR /src
 
 # Copy solution and project files first (layer caching)
