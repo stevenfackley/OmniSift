@@ -1,37 +1,17 @@
-name: CI
+name: ci
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build-and-test:
-    name: Build & Test
-    runs-on: ubuntu-latest
-    env:
-      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
-      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
-      DOTNET_NOLOGO: "true"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-
-      - name: Restore dependencies
-        run: dotnet restore OmniSift.sln --configfile NuGet.Config
-
-      - name: Build
-        run: dotnet build OmniSift.sln --no-restore --configuration Release
-
-      - name: Test
-        run: dotnet test OmniSift.sln --no-build --configuration Release --logger "console;verbosity=normal"
+  ci:
+    uses: stevenfackley/gh-actions/.github/workflows/ci-dotnet.yml@v1
+    with:
+      project-name: OmniSift
+    secrets: inherit
