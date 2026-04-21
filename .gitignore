@@ -66,3 +66,6 @@ __pycache__/
 infra/db/data/
 logs/
 temp/
+/.dotnet-cli/.dotnet
+/.dotnet
+*.lscache
