@@ -5,7 +5,6 @@
 // ============================================================
 
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using OmniSift.Api.Data;
 using OmniSift.Api.Middleware;
 using OmniSift.Api.Models;
@@ -36,9 +35,9 @@ public interface IDocumentIngestionService
 public sealed class DocumentIngestionService(
     OmniSiftDbContext dbContext,
     ITenantContext tenantContext,
-    [FromKeyedServices("pdf")]  ITextExtractor pdfExtractor,
-    [FromKeyedServices("sms")]  ITextExtractor smsExtractor,
-    [FromKeyedServices("web")]  ITextExtractor webExtractor,
+    [FromKeyedServices("pdf")] ITextExtractor pdfExtractor,
+    [FromKeyedServices("sms")] ITextExtractor smsExtractor,
+    [FromKeyedServices("web")] ITextExtractor webExtractor,
     ITextChunker chunker,
     IEmbeddingService embeddingService,
     ILogger<DocumentIngestionService> logger) : IDocumentIngestionService
@@ -86,7 +85,9 @@ public sealed class DocumentIngestionService(
 
         // Use a transaction to ensure atomicity: either all chunks + data source
         // are persisted, or the whole operation rolls back.
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+#pragma warning disable CA2007 // await using DisposeAsync — block-form restructure not worth it for ASP.NET Core (no SyncContext)
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning restore CA2007
 
         // Create the data source record
         var dataSource = new DataSource
@@ -99,7 +100,7 @@ public sealed class DocumentIngestionService(
         };
 
         dbContext.DataSources.Add(dataSource);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "Starting ingestion for DataSource {DataSourceId}, type={SourceType}, tenant={TenantId}",
@@ -108,14 +109,14 @@ public sealed class DocumentIngestionService(
         try
         {
             // Step 1: Extract text
-            var rawText = await extractor.ExtractTextAsync(stream, fileName, cancellationToken);
+            var rawText = await extractor.ExtractTextAsync(stream, fileName, cancellationToken).ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(rawText))
             {
                 dataSource.Status = IngestionStatus.Failed;
                 dataSource.ErrorMessage = "No text could be extracted from the source.";
                 dataSource.UpdatedAt = DateTime.UtcNow;
-                await dbContext.SaveChangesAsync(cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return dataSource;
             }
 
@@ -134,7 +135,7 @@ public sealed class DocumentIngestionService(
 
                 var batch = chunks.Skip(i).Take(EmbeddingBatchSize).ToList();
                 var batchTexts = batch.Select(c => c.Content);
-                var embeddings = await embeddingService.GenerateEmbeddingsAsync(batchTexts, cancellationToken);
+                var embeddings = await embeddingService.GenerateEmbeddingsAsync(batchTexts, cancellationToken).ConfigureAwait(false);
                 allEmbeddings.AddRange(embeddings);
 
                 logger.LogDebug(
@@ -169,8 +170,8 @@ public sealed class DocumentIngestionService(
                 ["text_length"] = rawText.Length
             };
 
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             logger.LogInformation(
                 "Ingestion completed for DataSource {DataSourceId}: {ChunkCount} chunks, {TokenCount} total tokens",
@@ -188,7 +189,7 @@ public sealed class DocumentIngestionService(
 
             try
             {
-                await dbContext.SaveChangesAsync(CancellationToken.None);
+                await dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception saveEx)
             {

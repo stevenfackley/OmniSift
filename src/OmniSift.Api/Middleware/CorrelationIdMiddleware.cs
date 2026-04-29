@@ -38,7 +38,7 @@ public sealed class CorrelationIdMiddleware(RequestDelegate next)
         // thread/async flow will carry CorrelationId automatically.
         using (LogContext.PushProperty("CorrelationId", correlationId))
         {
-            await next(context);
+            await next(context).ConfigureAwait(false);
         }
     }
 }

@@ -4,7 +4,6 @@
 // ============================================================
 
 using System.ComponentModel;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.SemanticKernel;
@@ -37,7 +36,7 @@ public sealed class WaybackMachinePlugin(
             var encodedUrl = Uri.EscapeDataString(url);
             var apiUrl = $"http://archive.org/wayback/available?url={encodedUrl}";
 
-            var response = await httpClient.GetFromJsonAsync<WaybackResponse>(apiUrl);
+            var response = await httpClient.GetFromJsonAsync<WaybackResponse>(apiUrl).ConfigureAwait(false);
 
             if (response?.ArchivedSnapshots?.Closest is null)
             {

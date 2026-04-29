@@ -29,7 +29,7 @@ public sealed class PdfTextExtractor(ILogger<PdfTextExtractor> logger) : ITextEx
 
         // PdfPig requires a seekable stream; buffer if needed
         using var memoryStream = new MemoryStream();
-        await stream.CopyToAsync(memoryStream, cancellationToken);
+        await stream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
         memoryStream.Position = 0;
 
         using var document = PdfDocument.Open(memoryStream);

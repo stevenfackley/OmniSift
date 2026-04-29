@@ -27,7 +27,7 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
         if (path.StartsWith("/health") || path.StartsWith("/api/health") || path.StartsWith("/swagger"))
         {
-            await next(context);
+            await next(context).ConfigureAwait(false);
             return;
         }
 
@@ -42,7 +42,7 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
             await context.Response.WriteAsJsonAsync(new
             {
                 error = $"Missing or invalid '{TenantHeaderName}' header. Must be a valid GUID."
-            });
+            }).ConfigureAwait(false);
             return;
         }
 
@@ -54,7 +54,7 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
         // Skip for non-relational providers (e.g., InMemory during testing).
         if (!dbContext.Database.IsRelational())
         {
-            await next(context);
+            await next(context).ConfigureAwait(false);
             return;
         }
 
@@ -63,10 +63,12 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
             var connection = dbContext.Database.GetDbConnection();
             if (connection.State != System.Data.ConnectionState.Open)
             {
-                await connection.OpenAsync(context.RequestAborted);
+                await connection.OpenAsync(context.RequestAborted).ConfigureAwait(false);
             }
 
+#pragma warning disable CA2007 // await using DisposeAsync — block-form restructure not worth it for ASP.NET Core (no SyncContext)
             await using var command = connection.CreateCommand();
+#pragma warning restore CA2007
             // Use set_config() instead of SET to allow parameterized query.
             // 'false' = setting persists for the entire session/connection.
             command.CommandText = "SELECT set_config('app.current_tenant', @tenantId, false)";
@@ -74,7 +76,7 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
             param.ParameterName = "@tenantId";
             param.Value = tenantId.ToString();
             command.Parameters.Add(param);
-            await command.ExecuteNonQueryAsync(context.RequestAborted);
+            await command.ExecuteNonQueryAsync(context.RequestAborted).ConfigureAwait(false);
 
             logger.LogDebug("Tenant context set to {TenantId}", tenantId);
         }
@@ -82,11 +84,11 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
         {
             logger.LogError(ex, "Failed to set tenant context for {TenantId}", tenantId);
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            await context.Response.WriteAsJsonAsync(new { error = "Failed to establish tenant context." });
+            await context.Response.WriteAsJsonAsync(new { error = "Failed to establish tenant context." }).ConfigureAwait(false);
             return;
         }
 
-        await next(context);
+        await next(context).ConfigureAwait(false);
     }
 }
 

@@ -4,7 +4,6 @@
 // ============================================================
 
 using System.ComponentModel;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -59,11 +58,11 @@ public sealed class WebScraperPlugin(
 
             var response = await httpClient.PostAsJsonAsync(
                 "https://api.tavily.com/search",
-                request);
+                request).ConfigureAwait(false);
 
             response.EnsureSuccessStatusCode();
 
-            var result = await response.Content.ReadFromJsonAsync<TavilySearchResponse>();
+            var result = await response.Content.ReadFromJsonAsync<TavilySearchResponse>().ConfigureAwait(false);
 
             if (result?.Results is null || result.Results.Count == 0)
             {

@@ -21,7 +21,7 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, ILogger<ApiKeyAut
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
         if (path.StartsWith("/health") || path.StartsWith("/api/health") || path.StartsWith("/swagger"))
         {
-            await next(context);
+            await next(context).ConfigureAwait(false);
             return;
         }
 
@@ -35,7 +35,7 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, ILogger<ApiKeyAut
             await context.Response.WriteAsJsonAsync(new
             {
                 error = $"Missing '{ApiKeyHeaderName}' header."
-            });
+            }).ConfigureAwait(false);
             return;
         }
 
@@ -59,7 +59,7 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, ILogger<ApiKeyAut
                     .AsNoTracking()
                     .Where(t => t.Id == tenantId && t.IsActive)
                     .Select(t => new { t.ApiKeyHash })
-                    .FirstOrDefaultAsync(context.RequestAborted);
+                    .FirstOrDefaultAsync(context.RequestAborted).ConfigureAwait(false);
 
                 if (tenant is null)
                 {
@@ -68,7 +68,7 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, ILogger<ApiKeyAut
                     await context.Response.WriteAsJsonAsync(new
                     {
                         error = "Tenant not found or inactive."
-                    });
+                    }).ConfigureAwait(false);
                     return;
                 }
 
@@ -82,7 +82,7 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, ILogger<ApiKeyAut
                     await context.Response.WriteAsJsonAsync(new
                     {
                         error = "API key is not authorized for this tenant."
-                    });
+                    }).ConfigureAwait(false);
                     return;
                 }
             }
@@ -93,11 +93,11 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, ILogger<ApiKeyAut
             await context.Response.WriteAsJsonAsync(new
             {
                 error = "Invalid API key."
-            });
+            }).ConfigureAwait(false);
             return;
         }
 
-        await next(context);
+        await next(context).ConfigureAwait(false);
     }
 
     internal static string HashApiKey(string rawKey)

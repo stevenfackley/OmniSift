@@ -7,7 +7,6 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OmniSift.Api.Models;
-using Pgvector;
 
 namespace OmniSift.Api.Data;
 

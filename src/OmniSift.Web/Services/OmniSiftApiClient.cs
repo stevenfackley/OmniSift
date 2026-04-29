@@ -36,9 +36,9 @@ public sealed class OmniSiftApiClient(HttpClient httpClient)
     public async Task<List<DataSourceDto>> GetDataSourcesAsync()
     {
         var request = CreateRequest(HttpMethod.Get, "api/datasources");
-        var response = await httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<List<DataSourceDto>>() ?? [];
+        return await response.Content.ReadFromJsonAsync<List<DataSourceDto>>().ConfigureAwait(false) ?? [];
     }
 
     /// <summary>
@@ -47,13 +47,13 @@ public sealed class OmniSiftApiClient(HttpClient httpClient)
     public async Task<DataSourceDto?> GetDataSourceAsync(Guid id)
     {
         var request = CreateRequest(HttpMethod.Get, $"api/datasources/{id}");
-        var response = await httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
 
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<DataSourceDto>();
+        return await response.Content.ReadFromJsonAsync<DataSourceDto>().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -77,9 +77,9 @@ public sealed class OmniSiftApiClient(HttpClient httpClient)
         };
         request.Headers.Add("X-Tenant-Id", TenantId.ToString());
 
-        var response = await httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<IngestionResponse>()
+        return await response.Content.ReadFromJsonAsync<IngestionResponse>().ConfigureAwait(false)
             ?? new IngestionResponse { Status = "error", Message = "Failed to parse response." };
     }
 
@@ -90,9 +90,9 @@ public sealed class OmniSiftApiClient(HttpClient httpClient)
     {
         var request = CreateRequest(HttpMethod.Post, "api/datasources/web");
         request.Content = JsonContent.Create(new WebIngestionRequest { Url = url });
-        var response = await httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<IngestionResponse>()
+        return await response.Content.ReadFromJsonAsync<IngestionResponse>().ConfigureAwait(false)
             ?? new IngestionResponse { Status = "error", Message = "Failed to parse response." };
     }
 
@@ -102,7 +102,7 @@ public sealed class OmniSiftApiClient(HttpClient httpClient)
     public async Task DeleteDataSourceAsync(Guid id)
     {
         var request = CreateRequest(HttpMethod.Delete, $"api/datasources/{id}");
-        var response = await httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 
@@ -115,9 +115,9 @@ public sealed class OmniSiftApiClient(HttpClient httpClient)
     {
         var request = CreateRequest(HttpMethod.Post, "api/agent/query");
         request.Content = JsonContent.Create(queryRequest);
-        var response = await httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<AgentQueryResponse>()
+        return await response.Content.ReadFromJsonAsync<AgentQueryResponse>().ConfigureAwait(false)
             ?? new AgentQueryResponse { Response = "Failed to parse response." };
     }
 
@@ -130,7 +130,7 @@ public sealed class OmniSiftApiClient(HttpClient httpClient)
     {
         try
         {
-            var response = await httpClient.GetAsync("api/health");
+            var response = await httpClient.GetAsync("api/health").ConfigureAwait(false);
             return response.IsSuccessStatusCode;
         }
         catch

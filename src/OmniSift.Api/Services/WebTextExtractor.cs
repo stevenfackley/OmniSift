@@ -51,7 +51,7 @@ public sealed class WebTextExtractor(ILogger<WebTextExtractor> logger) : ITextEx
         logger.LogDebug("Extracting text from HTML: {FileName}", fileName ?? "unknown");
 
         using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
-        var html = await reader.ReadToEndAsync(cancellationToken);
+        var html = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(html))
         {

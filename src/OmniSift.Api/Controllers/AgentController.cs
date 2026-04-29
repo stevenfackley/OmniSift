@@ -6,7 +6,6 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using OmniSift.Api.Data;
@@ -99,7 +98,7 @@ public sealed class AgentController(
             chatHistory,
             executionSettings,
             kernel,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         sw.Stop();
 
@@ -125,7 +124,7 @@ public sealed class AgentController(
         };
 
         dbContext.QueryHistories.Add(queryHistory);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "Agent query completed in {DurationMs}ms, plugins={Plugins}",

@@ -4,7 +4,6 @@
 // ============================================================
 
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OmniSift.Api.Data;
 
 namespace OmniSift.Api.Controllers;
@@ -26,7 +25,7 @@ public sealed class HealthController(
 
         try
         {
-            dbHealthy = await dbContext.Database.CanConnectAsync(cancellationToken);
+            dbHealthy = await dbContext.Database.CanConnectAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

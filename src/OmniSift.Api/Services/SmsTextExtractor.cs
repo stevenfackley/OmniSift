@@ -29,7 +29,7 @@ public sealed class SmsTextExtractor(ILogger<SmsTextExtractor> logger) : ITextEx
         logger.LogDebug("Extracting text from SMS export: {FileName}", fileName ?? "unknown");
 
         using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
-        var content = await reader.ReadToEndAsync(cancellationToken);
+        var content = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(content))
         {

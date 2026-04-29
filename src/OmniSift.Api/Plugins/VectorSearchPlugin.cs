@@ -10,7 +10,6 @@ using Microsoft.SemanticKernel;
 using OmniSift.Api.Data;
 using OmniSift.Api.Middleware;
 using OmniSift.Api.Services;
-using Pgvector;
 using Pgvector.EntityFrameworkCore;
 
 namespace OmniSift.Api.Plugins;
@@ -44,7 +43,7 @@ public sealed class VectorSearchPlugin(
         try
         {
             // Generate query embedding
-            var queryEmbedding = await embeddingService.GenerateEmbeddingAsync(query);
+            var queryEmbedding = await embeddingService.GenerateEmbeddingAsync(query).ConfigureAwait(false);
 
             // Perform cosine similarity search
             var results = await dbContext.DocumentChunks
@@ -62,7 +61,7 @@ public sealed class VectorSearchPlugin(
                     DataSourceType = c.DataSource.SourceType,
                     Distance = c.Embedding!.CosineDistance(queryEmbedding)
                 })
-                .ToListAsync();
+                .ToListAsync().ConfigureAwait(false);
 
             if (results.Count == 0)
             {

@@ -3,7 +3,6 @@
 // Generates vector embeddings via OpenAI API
 // ============================================================
 
-using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using OmniSift.Api.Options;
@@ -41,7 +40,7 @@ public sealed class OpenAIEmbeddingService(
     /// <inheritdoc />
     public async Task<Vector> GenerateEmbeddingAsync(string text, CancellationToken cancellationToken = default)
     {
-        var embeddings = await GenerateEmbeddingsAsync([text], cancellationToken);
+        var embeddings = await GenerateEmbeddingsAsync([text], cancellationToken).ConfigureAwait(false);
         return embeddings[0];
     }
 
@@ -67,12 +66,12 @@ public sealed class OpenAIEmbeddingService(
         var response = await httpClient.PostAsJsonAsync(
             "https://api.openai.com/v1/embeddings",
             request,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<OpenAIEmbeddingResponse>(
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (result?.Data is null || result.Data.Count != textList.Count)
         {

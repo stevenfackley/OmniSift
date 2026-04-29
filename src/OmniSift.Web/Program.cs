@@ -23,4 +23,4 @@ builder.Services.AddScoped(sp => new HttpClient
 // Register application services
 builder.Services.AddScoped<OmniSiftApiClient>();
 
-await builder.Build().RunAsync();
+await builder.Build().RunAsync().ConfigureAwait(false);

@@ -3,6 +3,8 @@
 // Configures in-memory database and mocked services for testing
 // ============================================================
 
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -15,8 +17,6 @@ using OmniSift.Api.Data;
 using OmniSift.Api.Models;
 using OmniSift.Api.Services;
 using Pgvector;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace OmniSift.IntegrationTests;
 

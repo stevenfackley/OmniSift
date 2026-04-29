@@ -85,7 +85,7 @@ public sealed class DataSourcesController(
 
         using var stream = file.OpenReadStream();
         var dataSource = await ingestionService.IngestAsync(
-            stream, resolvedSourceType, file.FileName, cancellationToken: cancellationToken);
+            stream, resolvedSourceType, file.FileName, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return Ok(new IngestionResponse
         {
@@ -115,12 +115,12 @@ public sealed class DataSourcesController(
 
         // Fetch the web page — HttpRequestException propagates to GlobalExceptionHandler (502)
         var httpClient = httpClientFactory.CreateClient();
-        var response = await httpClient.GetAsync(request.Url, cancellationToken);
+        var response = await httpClient.GetAsync(request.Url, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         var dataSource = await ingestionService.IngestAsync(
-            stream, "web", null, request.Url, cancellationToken);
+            stream, "web", null, request.Url, cancellationToken).ConfigureAwait(false);
 
         return Ok(new IngestionResponse
         {
@@ -142,7 +142,7 @@ public sealed class DataSourcesController(
             .Where(ds => ds.TenantId == tenantContext.TenantId)
             .OrderByDescending(ds => ds.CreatedAt)
             .Include(ds => ds.Chunks)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var sources = entities.Select(ds => new DataSourceDto
         {
@@ -171,7 +171,7 @@ public sealed class DataSourcesController(
             .Include(ds => ds.Chunks)
             .FirstOrDefaultAsync(
                 ds => ds.TenantId == tenantContext.TenantId && ds.Id == id,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
         if (ds is null)
             return NotFound(new { error = $"Data source '{id}' not found." });
@@ -200,13 +200,13 @@ public sealed class DataSourcesController(
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var source = await dbContext.DataSources
-            .FirstOrDefaultAsync(ds => ds.TenantId == tenantContext.TenantId && ds.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(ds => ds.TenantId == tenantContext.TenantId && ds.Id == id, cancellationToken).ConfigureAwait(false);
 
         if (source is null)
             return NotFound(new { error = $"Data source '{id}' not found." });
 
         dbContext.DataSources.Remove(source);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "Deleted DataSource {DataSourceId} for tenant {TenantId}",
