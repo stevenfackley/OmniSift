@@ -100,7 +100,7 @@ public class OmniSiftDbContext : DbContext
             entity.Property(e => e.Content).HasColumnName("content").IsRequired();
             entity.Property(e => e.ChunkIndex).HasColumnName("chunk_index").IsRequired();
             entity.Property(e => e.TokenCount).HasColumnName("token_count").HasDefaultValue(0);
-            entity.Property(e => e.Embedding).HasColumnName("embedding").HasColumnType("vector(3072)");
+            entity.Property(e => e.Embedding).HasColumnName("embedding").HasColumnType("vector(384)");
             entity.Property(e => e.Metadata).HasColumnName("metadata").HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb")
                 .HasConversion(JsonDictionaryConverter);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");

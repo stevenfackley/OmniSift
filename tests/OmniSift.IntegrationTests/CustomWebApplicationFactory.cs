@@ -81,11 +81,11 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             var embeddingMock = new Mock<IEmbeddingService>();
             embeddingMock
                 .Setup(e => e.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new Vector(new float[3072]));
+                .ReturnsAsync(new Vector(new float[384]));
             embeddingMock
                 .Setup(e => e.GenerateEmbeddingsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((IEnumerable<string> texts, CancellationToken _) =>
-                    texts.Select(_ => new Vector(new float[3072])).ToList());
+                    texts.Select(_ => new Vector(new float[384])).ToList());
             services.AddSingleton(embeddingMock.Object);
 
             // Replace Semantic Kernel with a simple empty kernel (no LLM)

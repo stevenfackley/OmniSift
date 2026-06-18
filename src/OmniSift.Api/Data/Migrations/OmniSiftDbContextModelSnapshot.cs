@@ -18,7 +18,7 @@ namespace OmniSift.Api.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0-preview.2.25163.8")
+                .HasAnnotation("ProductVersion", "10.0.8")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "uuid-ossp");
@@ -119,7 +119,7 @@ namespace OmniSift.Api.Data.Migrations
                         .HasColumnName("data_source_id");
 
                     b.Property<Vector>("Embedding")
-                        .HasColumnType("vector(3072)")
+                        .HasColumnType("vector(384)")
                         .HasColumnName("embedding");
 
                     b.Property<string>("Metadata")

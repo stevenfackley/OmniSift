@@ -92,7 +92,7 @@ namespace OmniSift.Api.Data.Migrations
                     content = table.Column<string>(type: "text", nullable: false),
                     chunk_index = table.Column<int>(type: "integer", nullable: false),
                     token_count = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
-                    embedding = table.Column<Vector>(type: "vector(3072)", nullable: true),
+                    embedding = table.Column<Vector>(type: "vector(384)", nullable: true),
                     metadata = table.Column<string>(type: "jsonb", nullable: false, defaultValueSql: "'{}'::jsonb"),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
