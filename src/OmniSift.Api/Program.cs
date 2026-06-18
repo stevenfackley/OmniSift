@@ -66,6 +66,9 @@ try
     builder.Services.Configure<OpenAiOptions>(
         builder.Configuration.GetSection(OpenAiOptions.Section));
 
+    builder.Services.Configure<EmbeddingOptions>(
+        builder.Configuration.GetSection(EmbeddingOptions.Section));
+
     builder.Services.Configure<TavilyOptions>(
         builder.Configuration.GetSection(TavilyOptions.Section));
 
@@ -124,14 +127,29 @@ try
     // ── HTTP Clients ────────────────────────────────────────────
     builder.Services.AddHttpClient();
 
-    // OpenAI embedding client — with resilience pipeline
-    builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>((sp, client) =>
+    // ── Embedding provider toggle (OpenAI cloud API vs local ONNX) ──
+    var embeddingProvider = builder.Configuration
+        .GetSection(EmbeddingOptions.Section)
+        .Get<EmbeddingOptions>()?.Provider ?? EmbeddingProvider.OpenAi;
+
+    if (embeddingProvider == EmbeddingProvider.Onnx)
     {
-        var opts = sp.GetRequiredService<IOptions<OpenAiOptions>>().Value;
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {opts.ApiKey}");
-        client.Timeout = TimeSpan.FromSeconds(60);
-    })
-    .AddStandardResilienceHandler();
+        // One thread-safe InferenceSession shared process-wide. The constructor
+        // fails fast (throws) if the model/vocab are missing or the model width
+        // disagrees with the pgvector column — surfaced at startup below.
+        builder.Services.AddSingleton<IEmbeddingService, OnnxEmbeddingService>();
+    }
+    else
+    {
+        // OpenAI embedding client — with resilience pipeline
+        builder.Services.AddHttpClient<IEmbeddingService, OpenAIEmbeddingService>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<OpenAiOptions>>().Value;
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {opts.ApiKey}");
+            client.Timeout = TimeSpan.FromSeconds(60);
+        })
+        .AddStandardResilienceHandler();
+    }
 
     // ── Data Ingestion Services ─────────────────────────────────
     builder.Services.AddSingleton<ITextChunker, TextChunker>();
@@ -264,6 +282,12 @@ try
         using var scope = app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OmniSiftDbContext>();
         dbContext.Database.Migrate();
+
+        // Fail fast: force the ONNX model to load at startup (mirrors Migrate()
+        // above) so a misconfigured local provider refuses to boot rather than
+        // silently failing — or silently re-billing OpenAI — on first request.
+        if (embeddingProvider == EmbeddingProvider.Onnx)
+            scope.ServiceProvider.GetRequiredService<IEmbeddingService>();
     }
 
     // ── Middleware Pipeline ──────────────────────────────────────
