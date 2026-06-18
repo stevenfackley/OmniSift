@@ -83,120 +83,127 @@ public sealed class DocumentIngestionService(
 
         var tenantId = tenantContext.TenantId;
 
-        // Use a transaction to ensure atomicity: either all chunks + data source
-        // are persisted, or the whole operation rolls back.
+        // EnableRetryOnFailure configures a retrying execution strategy, which forbids a
+        // user-initiated transaction unless it runs INSIDE the strategy — so a transient
+        // retry replays the whole unit rather than resuming a half-applied transaction.
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            // Use a transaction to ensure atomicity: either all chunks + data source
+            // are persisted, or the whole operation rolls back.
 #pragma warning disable CA2007 // await using DisposeAsync — block-form restructure not worth it for ASP.NET Core (no SyncContext)
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 #pragma warning restore CA2007
 
-        // Create the data source record
-        var dataSource = new DataSource
-        {
-            TenantId = tenantId,
-            SourceType = sourceType,
-            FileName = fileName,
-            OriginalUrl = originalUrl,
-            Status = IngestionStatus.Processing
-        };
-
-        dbContext.DataSources.Add(dataSource);
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        logger.LogInformation(
-            "Starting ingestion for DataSource {DataSourceId}, type={SourceType}, tenant={TenantId}",
-            dataSource.Id, sourceType, tenantId);
-
-        try
-        {
-            // Step 1: Extract text
-            var rawText = await extractor.ExtractTextAsync(stream, fileName, cancellationToken).ConfigureAwait(false);
-
-            if (string.IsNullOrWhiteSpace(rawText))
-            {
-                dataSource.Status = IngestionStatus.Failed;
-                dataSource.ErrorMessage = "No text could be extracted from the source.";
-                dataSource.UpdatedAt = DateTime.UtcNow;
-                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                return dataSource;
-            }
-
-            logger.LogDebug("Extracted {Length} chars from source {DataSourceId}", rawText.Length, dataSource.Id);
-
-            // Step 2: Chunk text
-            var chunks = chunker.ChunkText(rawText);
-            logger.LogDebug("Created {ChunkCount} chunks from source {DataSourceId}", chunks.Count, dataSource.Id);
-
-            // Step 3: Generate embeddings in batches
-            var allEmbeddings = new List<Pgvector.Vector>();
-
-            for (var i = 0; i < chunks.Count; i += EmbeddingBatchSize)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var batch = chunks.Skip(i).Take(EmbeddingBatchSize).ToList();
-                var batchTexts = batch.Select(c => c.Content);
-                var embeddings = await embeddingService.GenerateEmbeddingsAsync(batchTexts, cancellationToken).ConfigureAwait(false);
-                allEmbeddings.AddRange(embeddings);
-
-                logger.LogDebug(
-                    "Generated embeddings batch {Batch}/{Total} for source {DataSourceId}",
-                    Math.Min(i + EmbeddingBatchSize, chunks.Count), chunks.Count, dataSource.Id);
-            }
-
-            // Step 4: Create document chunk entities and persist
-            var documentChunks = chunks.Select((chunk, idx) => new DocumentChunk
+            // Create the data source record
+            var dataSource = new DataSource
             {
                 TenantId = tenantId,
-                DataSourceId = dataSource.Id,
-                Content = chunk.Content,
-                ChunkIndex = chunk.Index,
-                TokenCount = chunk.TokenCount,
-                Embedding = allEmbeddings[idx],
-                Metadata = new Dictionary<string, object>
-                {
-                    ["source_type"] = sourceType,
-                    ["file_name"] = fileName ?? string.Empty
-                }
-            }).ToList();
-
-            dbContext.DocumentChunks.AddRange(documentChunks);
-
-            dataSource.Status = IngestionStatus.Completed;
-            dataSource.UpdatedAt = DateTime.UtcNow;
-            dataSource.Metadata = new Dictionary<string, object>
-            {
-                ["chunk_count"] = documentChunks.Count,
-                ["total_tokens"] = documentChunks.Sum(c => c.TokenCount),
-                ["text_length"] = rawText.Length
+                SourceType = sourceType,
+                FileName = fileName,
+                OriginalUrl = originalUrl,
+                Status = IngestionStatus.Processing
             };
 
+            dbContext.DataSources.Add(dataSource);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             logger.LogInformation(
-                "Ingestion completed for DataSource {DataSourceId}: {ChunkCount} chunks, {TokenCount} total tokens",
-                dataSource.Id, documentChunks.Count, documentChunks.Sum(c => c.TokenCount));
-
-            return dataSource;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "Ingestion failed for DataSource {DataSourceId}", dataSource.Id);
-
-            dataSource.Status = IngestionStatus.Failed;
-            dataSource.ErrorMessage = ex.Message;
-            dataSource.UpdatedAt = DateTime.UtcNow;
+                "Starting ingestion for DataSource {DataSourceId}, type={SourceType}, tenant={TenantId}",
+                dataSource.Id, sourceType, tenantId);
 
             try
             {
-                await dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception saveEx)
-            {
-                logger.LogError(saveEx, "Failed to save error status for DataSource {DataSourceId}", dataSource.Id);
-            }
+                // Step 1: Extract text
+                var rawText = await extractor.ExtractTextAsync(stream, fileName, cancellationToken).ConfigureAwait(false);
 
-            throw;
-        }
+                if (string.IsNullOrWhiteSpace(rawText))
+                {
+                    dataSource.Status = IngestionStatus.Failed;
+                    dataSource.ErrorMessage = "No text could be extracted from the source.";
+                    dataSource.UpdatedAt = DateTime.UtcNow;
+                    await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    return dataSource;
+                }
+
+                logger.LogDebug("Extracted {Length} chars from source {DataSourceId}", rawText.Length, dataSource.Id);
+
+                // Step 2: Chunk text
+                var chunks = chunker.ChunkText(rawText);
+                logger.LogDebug("Created {ChunkCount} chunks from source {DataSourceId}", chunks.Count, dataSource.Id);
+
+                // Step 3: Generate embeddings in batches
+                var allEmbeddings = new List<Pgvector.Vector>();
+
+                for (var i = 0; i < chunks.Count; i += EmbeddingBatchSize)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var batch = chunks.Skip(i).Take(EmbeddingBatchSize).ToList();
+                    var batchTexts = batch.Select(c => c.Content);
+                    var embeddings = await embeddingService.GenerateEmbeddingsAsync(batchTexts, cancellationToken).ConfigureAwait(false);
+                    allEmbeddings.AddRange(embeddings);
+
+                    logger.LogDebug(
+                        "Generated embeddings batch {Batch}/{Total} for source {DataSourceId}",
+                        Math.Min(i + EmbeddingBatchSize, chunks.Count), chunks.Count, dataSource.Id);
+                }
+
+                // Step 4: Create document chunk entities and persist
+                var documentChunks = chunks.Select((chunk, idx) => new DocumentChunk
+                {
+                    TenantId = tenantId,
+                    DataSourceId = dataSource.Id,
+                    Content = chunk.Content,
+                    ChunkIndex = chunk.Index,
+                    TokenCount = chunk.TokenCount,
+                    Embedding = allEmbeddings[idx],
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["source_type"] = sourceType,
+                        ["file_name"] = fileName ?? string.Empty
+                    }
+                }).ToList();
+
+                dbContext.DocumentChunks.AddRange(documentChunks);
+
+                dataSource.Status = IngestionStatus.Completed;
+                dataSource.UpdatedAt = DateTime.UtcNow;
+                dataSource.Metadata = new Dictionary<string, object>
+                {
+                    ["chunk_count"] = documentChunks.Count,
+                    ["total_tokens"] = documentChunks.Sum(c => c.TokenCount),
+                    ["text_length"] = rawText.Length
+                };
+
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+                logger.LogInformation(
+                    "Ingestion completed for DataSource {DataSourceId}: {ChunkCount} chunks, {TokenCount} total tokens",
+                    dataSource.Id, documentChunks.Count, documentChunks.Sum(c => c.TokenCount));
+
+                return dataSource;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Ingestion failed for DataSource {DataSourceId}", dataSource.Id);
+
+                dataSource.Status = IngestionStatus.Failed;
+                dataSource.ErrorMessage = ex.Message;
+                dataSource.UpdatedAt = DateTime.UtcNow;
+
+                try
+                {
+                    await dbContext.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception saveEx)
+                {
+                    logger.LogError(saveEx, "Failed to save error status for DataSource {DataSourceId}", dataSource.Id);
+                }
+
+                throw;
+            }
+        }).ConfigureAwait(false);
     }
 }
