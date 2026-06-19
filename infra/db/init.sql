@@ -1,138 +1,49 @@
 -- ============================================================
 -- OmniSift Database Initialization Script
 -- PostgreSQL 16 + pgvector
--- Multi-tenant schema with Row-Level Security (RLS)
+-- ============================================================
+--
+-- SCOPE — what this file owns:
+--   Only what EF Core's migrations cannot do as a non-superuser:
+--     1. Extensions (CREATE EXTENSION requires superuser in PG16).
+--     2. The `omnisift_app` application role + its GRANTs.
+--     3. Default privilege rules so future tables auto-grant.
+--
+-- WHAT RUNS FIRST (on a fresh container):
+--   docker-entrypoint-initdb.d runs this file as the postgres
+--   superuser before the .NET app starts. That is the only
+--   moment a superuser is available to CREATE EXTENSION / CREATE ROLE.
+--
+-- WHAT RUNS SECOND:
+--   Program.cs calls Database.Migrate() at startup, which runs
+--   EF's InitialCreate migration as the omnisift_app user.
+--   InitialCreate also contains `AlterDatabase().Annotation(...)` calls
+--   that emit `CREATE EXTENSION IF NOT EXISTS` — those are safe because
+--   Postgres short-circuits the IF NOT EXISTS check BEFORE the privilege
+--   check, so the non-superuser migration succeeds without error.
+--   InitialCreate owns: all tables, all indexes (including the HNSW
+--   index), RLS policies, and the seed tenant.
+--
+-- See docs/schema-provisioning.md for the full analysis of why
+-- the schema is split this way.
 -- ============================================================
 
--- Enable required extensions
+-- ============================================================
+-- Extensions
+-- Must run as superuser (postgres). EF's InitialCreate also emits
+-- CREATE EXTENSION IF NOT EXISTS for both extensions, but when they
+-- already exist Postgres short-circuits before the privilege check,
+-- so the non-superuser migration succeeds without error.
+-- ============================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "vector";
-
--- ============================================================
--- Table: tenants
--- Root table for multi-tenancy. Not RLS-protected itself
--- (admin operations need cross-tenant access).
--- ============================================================
-CREATE TABLE tenants (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name        VARCHAR(256) NOT NULL,
-    slug        VARCHAR(128) NOT NULL UNIQUE,
-    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_tenants_slug ON tenants (slug);
-
--- ============================================================
--- Table: data_sources
--- Tracks every uploaded/ingested data source per tenant.
--- ============================================================
-CREATE TABLE data_sources (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    source_type     VARCHAR(50) NOT NULL CHECK (source_type IN ('pdf', 'sms', 'web')),
-    file_name       VARCHAR(512),
-    original_url    VARCHAR(2048),
-    status          VARCHAR(50) NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
-    error_message   TEXT,
-    metadata        JSONB NOT NULL DEFAULT '{}',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_data_sources_tenant ON data_sources (tenant_id);
-CREATE INDEX idx_data_sources_status ON data_sources (tenant_id, status);
-
--- ============================================================
--- Table: document_chunks
--- Individual text chunks with vector embeddings for semantic
--- search. Dimension must match the active embedding provider
--- (384 for the local bge-small ONNX model).
--- ============================================================
-CREATE TABLE document_chunks (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    data_source_id  UUID NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
-    content         TEXT NOT NULL,
-    chunk_index     INTEGER NOT NULL,
-    token_count     INTEGER NOT NULL DEFAULT 0,
-    embedding       VECTOR(384),
-    metadata        JSONB NOT NULL DEFAULT '{}',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_document_chunks_tenant ON document_chunks (tenant_id);
-CREATE INDEX idx_document_chunks_source ON document_chunks (data_source_id);
-
--- HNSW index for fast approximate nearest neighbor search
--- Using cosine distance (most common for text embeddings)
-CREATE INDEX idx_document_chunks_embedding ON document_chunks
-    USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64);
-
--- ============================================================
--- Table: query_history
--- Stores agent query/response pairs for audit and context.
--- ============================================================
-CREATE TABLE query_history (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    query_text      TEXT NOT NULL,
-    response_text   TEXT,
-    plugins_used    JSONB NOT NULL DEFAULT '[]',
-    sources         JSONB NOT NULL DEFAULT '[]',
-    duration_ms     INTEGER,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_query_history_tenant ON query_history (tenant_id);
-CREATE INDEX idx_query_history_created ON query_history (tenant_id, created_at DESC);
-
--- ============================================================
--- Row-Level Security (RLS) Policies
--- Every tenant-scoped table enforces isolation via the
--- session variable 'app.current_tenant'.
--- ============================================================
-
--- Helper: Set a default for the session variable so RLS
--- doesn't fail if unset (returns empty string → no rows match)
--- The API middleware sets this on every request.
-
--- data_sources RLS
-ALTER TABLE data_sources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE data_sources FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY tenant_isolation_data_sources ON data_sources
-    FOR ALL
-    USING (tenant_id = current_setting('app.current_tenant', true)::uuid)
-    WITH CHECK (tenant_id = current_setting('app.current_tenant', true)::uuid);
-
--- document_chunks RLS
-ALTER TABLE document_chunks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE document_chunks FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY tenant_isolation_document_chunks ON document_chunks
-    FOR ALL
-    USING (tenant_id = current_setting('app.current_tenant', true)::uuid)
-    WITH CHECK (tenant_id = current_setting('app.current_tenant', true)::uuid);
-
--- query_history RLS
-ALTER TABLE query_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE query_history FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY tenant_isolation_query_history ON query_history
-    FOR ALL
-    USING (tenant_id = current_setting('app.current_tenant', true)::uuid)
-    WITH CHECK (tenant_id = current_setting('app.current_tenant', true)::uuid);
+CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ============================================================
 -- Application Role
 -- Create a non-superuser role for the application connection.
--- The superuser (postgres) bypasses RLS, so the app must
+-- The superuser (postgres) bypasses RLS, so the app MUST
 -- connect as this role for RLS to be enforced.
+-- This block is idempotent (IF NOT EXISTS guard).
 -- ============================================================
 DO $$
 BEGIN
@@ -142,19 +53,28 @@ BEGIN
 END
 $$;
 
-GRANT USAGE ON SCHEMA public TO omnisift_app;
+-- USAGE   : required to reference schema-qualified names.
+-- CREATE  : required for EF Migrate() to CREATE TABLE (including __EFMigrationsHistory).
+-- In PG15+ the public schema no longer grants CREATE to PUBLIC by default;
+-- omnisift_app needs it explicitly since it runs all EF migrations.
+GRANT USAGE, CREATE ON SCHEMA public TO omnisift_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO omnisift_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO omnisift_app;
 
--- Ensure future tables also grant to omnisift_app
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+-- ALTER DEFAULT PRIVILEGES FOR ROLE omnisift_app seeds the privilege
+-- template that Postgres applies whenever omnisift_app creates a new
+-- object. Since omnisift_app runs EF's Migrate() and therefore owns the
+-- tables it creates, it already has full rights on those tables by
+-- virtue of ownership. These defaults are future-proofing stubs: if a
+-- second role (e.g. a read-only reporting role) is added later, granting
+-- it rights on existing tables + setting a matching default privilege here
+-- ensures newly migrated tables are covered automatically — without
+-- requiring another superuser script at that point.
+--
+-- NOTE: `FOR ROLE omnisift_app` requires the caller (postgres) to be
+-- superuser OR a member of omnisift_app — postgres is superuser, so
+-- this runs fine in docker-entrypoint-initdb.d.
+ALTER DEFAULT PRIVILEGES FOR ROLE omnisift_app IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO omnisift_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE omnisift_app IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO omnisift_app;
-
--- ============================================================
--- Seed: Default Development Tenant
--- ============================================================
-INSERT INTO tenants (id, name, slug)
-VALUES ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'Development Tenant', 'dev')
-ON CONFLICT (slug) DO NOTHING;

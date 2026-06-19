@@ -53,8 +53,13 @@ public sealed class EmbeddingOptions
     /// <summary>Filesystem path to the .onnx model (ONNX provider only).</summary>
     public string ModelPath { get; set; } = "models/bge-small-en-v1.5/model.onnx";
 
-    /// <summary>Filesystem path to the matching tokenizer.json (ONNX provider only).</summary>
-    public string TokenizerPath { get; set; } = "models/bge-small-en-v1.5/tokenizer.json";
+    /// <summary>
+    /// Filesystem path to the WordPiece vocabulary file (vocab.txt) consumed by
+    /// <c>BertTokenizer.Create</c> (ONNX provider only). Must be a <c>vocab.txt</c> file —
+    /// NOT tokenizer.json; BertTokenizer.Create expects the raw WordPiece vocabulary list,
+    /// not the HuggingFace tokenizer config JSON.
+    /// </summary>
+    public string TokenizerPath { get; set; } = "models/bge-small-en-v1.5/vocab.txt";
 
     /// <summary>Output embedding dimension. Must match the model AND the pgvector column.</summary>
     public int Dimensions { get; set; } = 384;
