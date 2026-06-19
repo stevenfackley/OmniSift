@@ -122,7 +122,7 @@ namespace OmniSift.Api.Data.Migrations
                         .HasColumnName("data_source_id");
 
                     b.Property<Vector>("Embedding")
-                        .HasColumnType("vector(3072)")
+                        .HasColumnType("vector(384)")
                         .HasColumnName("embedding");
 
                     b.Property<string>("Metadata")

@@ -63,6 +63,8 @@ __pycache__/
 .venv/
 
 # OmniSift
+# Local ONNX embedding model (~130 MB) — fetched via scripts/fetch-embedding-model.ps1
+/models/
 infra/db/data/
 logs/
 temp/

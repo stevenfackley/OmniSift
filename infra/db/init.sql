@@ -48,7 +48,8 @@ CREATE INDEX idx_data_sources_status ON data_sources (tenant_id, status);
 -- ============================================================
 -- Table: document_chunks
 -- Individual text chunks with vector embeddings for semantic
--- search. Uses text-embedding-3-large (3072 dimensions).
+-- search. Dimension must match the active embedding provider
+-- (384 for the local bge-small ONNX model).
 -- ============================================================
 CREATE TABLE document_chunks (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -57,7 +58,7 @@ CREATE TABLE document_chunks (
     content         TEXT NOT NULL,
     chunk_index     INTEGER NOT NULL,
     token_count     INTEGER NOT NULL DEFAULT 0,
-    embedding       VECTOR(3072),
+    embedding       VECTOR(384),
     metadata        JSONB NOT NULL DEFAULT '{}',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()

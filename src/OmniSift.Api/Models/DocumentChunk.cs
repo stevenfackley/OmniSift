@@ -41,7 +41,8 @@ public sealed class DocumentChunk
     public int TokenCount { get; set; }
 
     /// <summary>
-    /// Vector embedding (3072 dimensions for text-embedding-3-large).
+    /// Vector embedding. Dimension is fixed by the pgvector column (384 for the
+    /// local bge-small ONNX model) and MUST match the active embedding provider.
     /// Null until embedding is generated.
     /// </summary>
     public Vector? Embedding { get; set; }

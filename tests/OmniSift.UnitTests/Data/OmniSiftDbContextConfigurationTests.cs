@@ -66,7 +66,7 @@ public sealed class OmniSiftDbContextConfigurationTests
 
         var documentChunkEntity = model.FindEntityType(typeof(DocumentChunk));
         documentChunkEntity.Should().NotBeNull();
-        documentChunkEntity!.FindProperty(nameof(DocumentChunk.Embedding))!.GetColumnType().Should().Be("vector(3072)");
+        documentChunkEntity!.FindProperty(nameof(DocumentChunk.Embedding))!.GetColumnType().Should().Be("vector(384)");
         documentChunkEntity.FindProperty(nameof(DocumentChunk.Metadata))!.GetColumnType().Should().Be("jsonb");
 
         var queryHistoryEntity = model.FindEntityType(typeof(QueryHistory));
