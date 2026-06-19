@@ -84,11 +84,7 @@ public sealed class OnnxEmbeddingParityTests
         return dot;
     }
 
-    [Fact(Skip =
-        "Fixture not populated. Run tools/generate_reference_vectors.py in a " +
-        "Python 3.10–3.12 env with sentence-transformers, redirect output to " +
-        "tests/OmniSift.UnitTests/Services/Fixtures/bge_small_en_v1_5_reference_vectors.json, " +
-        "then remove this Skip.")]
+    [Fact]
     public async Task DocumentEmbeddings_MatchPythonReferenceVectors_CosineSimilarityAtLeast0_999()
     {
         var references = LoadFixture();
