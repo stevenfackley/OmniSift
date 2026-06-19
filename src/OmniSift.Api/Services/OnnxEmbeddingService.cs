@@ -24,6 +24,14 @@ namespace OmniSift.Api.Services;
 /// Fail-fast: the constructor throws if the model/vocab are missing or the model's
 /// output width disagrees with <see cref="EmbeddingOptions.Dimensions"/>, so a
 /// misconfigured ONNX provider refuses to start rather than silently degrading.
+/// <para>
+/// Path resolution: relative <see cref="EmbeddingOptions.ModelPath"/> /
+/// <see cref="EmbeddingOptions.TokenizerPath"/> values are resolved against
+/// <see cref="IWebHostEnvironment.ContentRootPath"/> when the environment is
+/// available (the normal DI path), or against the process working directory when
+/// it is not (unit-test path where absolute paths are always supplied).
+/// Absolute paths are passed through unchanged in both cases.
+/// </para>
 /// </remarks>
 public sealed class OnnxEmbeddingService : IEmbeddingService, IDisposable
 {
@@ -33,12 +41,35 @@ public sealed class OnnxEmbeddingService : IEmbeddingService, IDisposable
     private readonly List<string> _inputNames;
     private readonly string _outputName;
 
+    /// <summary>
+    /// DI constructor — resolves relative model paths against
+    /// <paramref name="env"/>.ContentRootPath so Docker images can ship a
+    /// model at a well-known path (e.g. /app/models/…) regardless of CWD.
+    /// </summary>
+    public OnnxEmbeddingService(
+        IOptions<EmbeddingOptions> options,
+        ILogger<OnnxEmbeddingService> logger,
+        IWebHostEnvironment env)
+        : this(options, logger, env.ContentRootPath) { }
+
+    /// <summary>
+    /// Test-friendly constructor — pass absolute paths via
+    /// <see cref="EmbeddingOptions"/> and omit the environment.
+    /// Relative paths fall back to the process working directory (same
+    /// behaviour as before this change), so existing tests are unaffected.
+    /// </summary>
     public OnnxEmbeddingService(IOptions<EmbeddingOptions> options, ILogger<OnnxEmbeddingService> logger)
+        : this(options, logger, contentRootPath: null) { }
+
+    private OnnxEmbeddingService(
+        IOptions<EmbeddingOptions> options,
+        ILogger<OnnxEmbeddingService> logger,
+        string? contentRootPath)
     {
         _opts = options.Value;
 
-        var modelPath = Path.GetFullPath(_opts.ModelPath);
-        var vocabPath = Path.GetFullPath(_opts.TokenizerPath);
+        var modelPath = ResolvePath(_opts.ModelPath, contentRootPath);
+        var vocabPath = ResolvePath(_opts.TokenizerPath, contentRootPath);
 
         if (!File.Exists(modelPath))
             throw new FileNotFoundException(
@@ -140,6 +171,23 @@ public sealed class OnnxEmbeddingService : IEmbeddingService, IDisposable
         var mask = new int[count];
         Array.Fill(mask, 1);
         return mask;
+    }
+
+    /// <summary>
+    /// Resolves a model path to an absolute path.
+    /// If <paramref name="path"/> is already absolute it is returned unchanged.
+    /// If <paramref name="contentRootPath"/> is supplied (DI path), relative paths
+    /// are anchored there (e.g. /app inside the container).
+    /// Otherwise they fall back to <see cref="Path.GetFullPath(string)"/> which uses CWD.
+    /// </summary>
+    private static string ResolvePath(string path, string? contentRootPath)
+    {
+        if (Path.IsPathRooted(path))
+            return path;
+
+        return contentRootPath is not null
+            ? Path.GetFullPath(path, contentRootPath)
+            : Path.GetFullPath(path);
     }
 
     public void Dispose() => _session.Dispose();
