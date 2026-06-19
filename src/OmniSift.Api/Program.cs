@@ -132,6 +132,27 @@ try
         .GetSection(EmbeddingOptions.Section)
         .Get<EmbeddingOptions>()?.Provider ?? EmbeddingProvider.OpenAi;
 
+    // Fail-fast: OpenAI emits 3072-dim vectors; the pgvector column is vector(384)
+    // (bge-small-en-v1.5). Switching back to OpenAI without a column migration
+    // silently inserts wrong-dimension vectors → runtime insert failures.
+    // This guard surfaces the misconfiguration at startup rather than on first embed.
+    if (embeddingProvider == EmbeddingProvider.OpenAi)
+    {
+        var embeddingOpts = builder.Configuration
+            .GetSection(EmbeddingOptions.Section)
+            .Get<EmbeddingOptions>() ?? new EmbeddingOptions();
+        var openAiOpts = builder.Configuration
+            .GetSection(OpenAiOptions.Section)
+            .Get<OpenAiOptions>() ?? new OpenAiOptions();
+
+        if (embeddingOpts.Dimensions != openAiOpts.EmbeddingDimensions)
+            throw new InvalidOperationException(
+                $"Provider=OpenAi but Embedding:Dimensions ({embeddingOpts.Dimensions}) != " +
+                $"OpenAI:EmbeddingDimensions ({openAiOpts.EmbeddingDimensions}). " +
+                $"The pgvector column is vector({embeddingOpts.Dimensions}). " +
+                "You must create an EF migration to change the column before switching providers.");
+    }
+
     if (embeddingProvider == EmbeddingProvider.Onnx)
     {
         // One thread-safe InferenceSession shared process-wide. The constructor

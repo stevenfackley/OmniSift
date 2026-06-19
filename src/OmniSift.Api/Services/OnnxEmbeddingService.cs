@@ -80,9 +80,36 @@ public sealed class OnnxEmbeddingService : IEmbeddingService, IDisposable
                 $"Tokenizer vocab not found at '{vocabPath}'. Set Embedding:TokenizerPath to the model's vocab.txt.",
                 vocabPath);
 
-        _session = new InferenceSession(modelPath);
+        // Single-threaded inference — let ASP.NET Core handle request-level parallelism
+        // rather than letting ORT spawn all-core threads per request (which causes contention
+        // under concurrent HTTP load). ORT_ENABLE_ALL applies graph-level optimizations
+        // (constant folding, node fusion) at session init time.
+        var sessionOptions = new Microsoft.ML.OnnxRuntime.SessionOptions
+        {
+            IntraOpNumThreads = 1,
+            InterOpNumThreads = 1,
+            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
+        };
+        _session = new InferenceSession(modelPath, sessionOptions);
+        sessionOptions.Dispose();
+
         _inputNames = [.. _session.InputMetadata.Keys];
-        _outputName = _session.OutputMetadata.Keys.First();
+
+        // Prefer the canonical output name; fall back to first key with a warning so
+        // models that rename the output (e.g. "sentence_embedding") still work rather
+        // than silently returning wrong data.
+        if (_session.OutputMetadata.ContainsKey("last_hidden_state"))
+        {
+            _outputName = "last_hidden_state";
+        }
+        else
+        {
+            _outputName = _session.OutputMetadata.Keys.First();
+            logger.LogWarning(
+                "ONNX model does not have a 'last_hidden_state' output; using '{Output}' instead. " +
+                "Verify this is the token-level hidden state, not a pooled/CLS output.",
+                _outputName);
+        }
 
         using (var vocab = File.OpenRead(vocabPath))
             _tokenizer = BertTokenizer.Create(vocab);
@@ -94,6 +121,12 @@ public sealed class OnnxEmbeddingService : IEmbeddingService, IDisposable
         if (hidden > 0 && hidden != _opts.Dimensions)
             throw new InvalidOperationException(
                 $"ONNX model output width {hidden} != configured Embedding:Dimensions {_opts.Dimensions}.");
+
+        if (hidden <= 0)
+            logger.LogWarning(
+                "ONNX model output '{Output}' has a symbolic/dynamic last dimension; " +
+                "dimension validation was skipped. Ensure the model emits {Dim}-dim vectors.",
+                _outputName, _opts.Dimensions);
 
         logger.LogInformation(
             "ONNX embeddings ready: {Model} dim={Dim} pooling={Pooling} inputs=[{Inputs}] output={Output}",

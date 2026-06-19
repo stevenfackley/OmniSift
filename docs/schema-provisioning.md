@@ -8,8 +8,8 @@ Two mechanisms both provision the OmniSift schema on a fresh database:
 
 | Mechanism | Runs as | When | Owns |
 |-----------|---------|------|------|
-| `infra/db/init.sql` | `postgres` superuser | `docker-entrypoint-initdb.d` at container first-boot | *Was:* everything. *Now:* role + GRANTs only. |
-| EF `InitialCreate` migration | `omnisift_app` (non-superuser) | `Program.cs` → `Database.Migrate()` at startup | Tables, indexes, HNSW, RLS policies, seed tenant. |
+| `infra/db/init.sql` | `postgres` superuser | `docker-entrypoint-initdb.d` at container first-boot | Extensions (`uuid-ossp`, `vector`), role creation, GRANTs. |
+| EF `InitialCreate` migration | `omnisift_app` (non-superuser) | `Program.cs` → `Database.Migrate()` at startup | Tables, indexes, HNSW, RLS policies, seed tenant. (Also emits `CREATE EXTENSION IF NOT EXISTS` — those no-op since extensions already exist.) |
 
 On a fresh `docker compose up` both ran in sequence, creating duplicate tables, indexes, and RLS policies. Postgres `CREATE TABLE` is not idempotent — the second run threw errors that were swallowed inside `InitialCreate` only because Migrate() detects the migration is already applied (it checks `__EFMigrationsHistory`). But this was fragile: if the table creation order or the history table raced, errors surfaced.
 
@@ -22,20 +22,28 @@ EF wins because:
 
 ## What init.sql keeps (and why it must)
 
-`omnisift_app` is a non-superuser login role. Creating it requires `postgres` (superuser), which is only available during `docker-entrypoint-initdb.d`. EF runs as `omnisift_app` — it cannot create its own role, and it cannot GRANT on tables that don't exist yet. So the split is:
+`omnisift_app` is a non-superuser login role. In PostgreSQL 16, `CREATE EXTENSION` requires superuser — the non-superuser `omnisift_app` cannot create extensions even with `IF NOT EXISTS`. The superuser is only available during `docker-entrypoint-initdb.d`. So the split is:
 
 1. `init.sql` (superuser, runs first):
-   - Creates `omnisift_app` role (idempotent DO $$ block).
-   - GRANTs current + future table/sequence privileges via `ALTER DEFAULT PRIVILEGES`.
+   - `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"` and `CREATE EXTENSION IF NOT EXISTS vector` — **must be here** because `omnisift_app` is not a superuser.
+   - Creates `omnisift_app` role (idempotent `DO $$` block).
+   - `GRANT USAGE, CREATE ON SCHEMA public TO omnisift_app` — in PG15+, the public schema no longer grants CREATE to PUBLIC by default. `omnisift_app` needs CREATE to run EF's `CREATE TABLE` statements (including `__EFMigrationsHistory`).
+   - GRANTs current + future table/sequence privileges via `ALTER DEFAULT PRIVILEGES FOR ROLE omnisift_app`.
 
 2. EF `InitialCreate` (omnisift_app, runs second):
-   - Extensions (`uuid-ossp`, `vector`).
+   - Also contains `AlterDatabase().Annotation(...)` calls that emit `CREATE EXTENSION IF NOT EXISTS` — those are safe because Postgres short-circuits the `IF NOT EXISTS` check before the privilege check when the extension already exists, so the non-superuser migration succeeds without error.
    - All tables, indexes (including HNSW), RLS policies.
    - Seed tenant row.
 
-## What was removed from init.sql
+## ALTER DEFAULT PRIVILEGES — what it actually does
 
-- `CREATE EXTENSION IF NOT EXISTS` blocks — EF handles these.
+The `ALTER DEFAULT PRIVILEGES FOR ROLE omnisift_app` block sets the privilege template that Postgres applies when `omnisift_app` creates future objects. Since `omnisift_app` owns the tables it creates via EF Migrate(), it already has full rights on those tables. These defaults are **future-proofing stubs**: if a second role (e.g. a read-only reporting role) is added later, granting it rights on existing tables and adding a matching default privilege ensures newly migrated tables are covered automatically without another superuser script. The `FOR ROLE omnisift_app` clause requires the caller to be a superuser or a member of `omnisift_app` — `postgres` is a superuser, so this runs fine in `docker-entrypoint-initdb.d`.
+
+## What was removed from init.sql (2026-06-18 correction)
+
+The original refactor removed the `CREATE EXTENSION` blocks with the intent that EF would handle them. This was incorrect: in PG16, `CREATE EXTENSION` requires superuser, and EF runs as the non-superuser `omnisift_app`. On a fresh `docker compose up`, the migration would fail with `must be superuser to create this extension`. The extensions are now back in `init.sql` where they belong.
+
+The following were correctly removed and remain owned by EF:
 - `CREATE TABLE` blocks for all four tables — EF handles these.
 - All `CREATE INDEX` statements — EF handles these (including the HNSW raw-SQL block).
 - All `ALTER TABLE … ENABLE ROW LEVEL SECURITY` and `CREATE POLICY` blocks — EF handles these.

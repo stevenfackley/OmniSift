@@ -1,0 +1,18 @@
+// PLACEHOLDER — do not use these values for assertions.
+//
+// To generate real reference vectors:
+//   1. Install sentence-transformers in a Python environment that has PyTorch wheels
+//      (Python 3.10–3.12 recommended; 3.14 has no torch wheels as of 2026-06).
+//   2. Run tools/generate_reference_vectors.py (see that file for full instructions).
+//   3. Replace this file with the JSON output.
+//   4. Remove the [Fact(Skip="...")] attribute from OnnxEmbeddingParityTests.
+//
+// Expected JSON structure (array of objects):
+// [
+//   {
+//     "text": "the input sentence",
+//     "vector": [0.123, -0.456, ...]   // 384 floats, L2-normalized, from sentence-transformers
+//   },
+//   ...
+// ]
+[]

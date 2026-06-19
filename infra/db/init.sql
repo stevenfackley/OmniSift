@@ -4,24 +4,39 @@
 -- ============================================================
 --
 -- SCOPE — what this file owns:
---   Only what EF Core's migrations do NOT create:
---     1. The `omnisift_app` application role + its GRANTs.
---     2. Default privilege rules so future tables auto-grant.
+--   Only what EF Core's migrations cannot do as a non-superuser:
+--     1. Extensions (CREATE EXTENSION requires superuser in PG16).
+--     2. The `omnisift_app` application role + its GRANTs.
+--     3. Default privilege rules so future tables auto-grant.
 --
 -- WHAT RUNS FIRST (on a fresh container):
 --   docker-entrypoint-initdb.d runs this file as the postgres
 --   superuser before the .NET app starts. That is the only
---   moment a superuser is available to CREATE ROLE.
+--   moment a superuser is available to CREATE EXTENSION / CREATE ROLE.
 --
 -- WHAT RUNS SECOND:
 --   Program.cs calls Database.Migrate() at startup, which runs
 --   EF's InitialCreate migration as the omnisift_app user.
---   InitialCreate owns: extensions, all tables, all indexes
---   (including the HNSW index), RLS policies, and the seed tenant.
+--   InitialCreate also contains `AlterDatabase().Annotation(...)` calls
+--   that emit `CREATE EXTENSION IF NOT EXISTS` — those are safe because
+--   Postgres short-circuits the IF NOT EXISTS check BEFORE the privilege
+--   check, so the non-superuser migration succeeds without error.
+--   InitialCreate owns: all tables, all indexes (including the HNSW
+--   index), RLS policies, and the seed tenant.
 --
 -- See docs/schema-provisioning.md for the full analysis of why
 -- the schema is split this way.
 -- ============================================================
+
+-- ============================================================
+-- Extensions
+-- Must run as superuser (postgres). EF's InitialCreate also emits
+-- CREATE EXTENSION IF NOT EXISTS for both extensions, but when they
+-- already exist Postgres short-circuits before the privilege check,
+-- so the non-superuser migration succeeds without error.
+-- ============================================================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ============================================================
 -- Application Role
@@ -38,15 +53,28 @@ BEGIN
 END
 $$;
 
-GRANT USAGE ON SCHEMA public TO omnisift_app;
+-- USAGE   : required to reference schema-qualified names.
+-- CREATE  : required for EF Migrate() to CREATE TABLE (including __EFMigrationsHistory).
+-- In PG15+ the public schema no longer grants CREATE to PUBLIC by default;
+-- omnisift_app needs it explicitly since it runs all EF migrations.
+GRANT USAGE, CREATE ON SCHEMA public TO omnisift_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO omnisift_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO omnisift_app;
 
--- Ensure tables created by future migrations also grant to omnisift_app.
--- This is the key reason init.sql must run BEFORE migrations: ALTER DEFAULT
--- PRIVILEGES is a superuser operation that seeds the permission template for
--- subsequent CREATE TABLE statements, including those run by EF at startup.
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+-- ALTER DEFAULT PRIVILEGES FOR ROLE omnisift_app seeds the privilege
+-- template that Postgres applies whenever omnisift_app creates a new
+-- object. Since omnisift_app runs EF's Migrate() and therefore owns the
+-- tables it creates, it already has full rights on those tables by
+-- virtue of ownership. These defaults are future-proofing stubs: if a
+-- second role (e.g. a read-only reporting role) is added later, granting
+-- it rights on existing tables + setting a matching default privilege here
+-- ensures newly migrated tables are covered automatically — without
+-- requiring another superuser script at that point.
+--
+-- NOTE: `FOR ROLE omnisift_app` requires the caller (postgres) to be
+-- superuser OR a member of omnisift_app — postgres is superuser, so
+-- this runs fine in docker-entrypoint-initdb.d.
+ALTER DEFAULT PRIVILEGES FOR ROLE omnisift_app IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO omnisift_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE omnisift_app IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO omnisift_app;

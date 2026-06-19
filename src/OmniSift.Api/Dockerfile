@@ -10,21 +10,46 @@
 # both the SDK and the source build layers.
 FROM debian:bookworm-slim AS model-fetch
 
-# curl is the only dependency; install and clean up in one layer.
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+# curl + coreutils (sha256sum) — install and clean up in one layer.
+RUN apt-get update && apt-get install -y --no-install-recommends curl coreutils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /models/bge-small-en-v1.5
 
-# ONNX graph — Xenova mirror (fp32, emits last_hidden_state)
-RUN curl -fSL \
-    "https://huggingface.co/Xenova/bge-small-en-v1.5/resolve/main/onnx/model.onnx" \
-    -o model.onnx
+# ── Model + vocabulary download (single layer so they travel together) ──
+#
+# URLs are pinned to specific HuggingFace commit SHAs to guard against
+# silent upstream changes that would break tokenization or change output
+# dimensions without any signal. To update: fetch the new commit SHA from
+# the HF repo's commit history, download the files, recompute sha256sum,
+# and update all three values below.
+#
+# Xenova/bge-small-en-v1.5  ONNX graph pin (resolve/<sha>/...):
+#   TODO: replace 'main' below with a specific commit SHA from
+#   https://huggingface.co/Xenova/bge-small-en-v1.5/commits/main
+#   e.g. resolve/abc1234.../onnx/model.onnx
+#
+# BAAI/bge-small-en-v1.5  vocab.txt pin:
+#   TODO: replace 'main' below with a specific commit SHA from
+#   https://huggingface.co/BAAI/bge-small-en-v1.5/commits/main
+#   e.g. resolve/def5678.../vocab.txt
+#
+# sha256 checksums — regenerate with:
+#   sha256sum model.onnx vocab.txt
+# after downloading from the pinned SHAs. The placeholder values below
+# must be replaced before this Dockerfile is used in a secure build.
+# Set MODEL_SHA256 and VOCAB_SHA256 to the real values once pinned.
+ARG MODEL_SHA256="REPLACE_WITH_REAL_SHA256_AFTER_PINNING_COMMIT"
+ARG VOCAB_SHA256="REPLACE_WITH_REAL_SHA256_AFTER_PINNING_COMMIT"
 
-# WordPiece vocabulary consumed by Microsoft.ML.Tokenizers BertTokenizer
 RUN curl -fSL \
-    "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main/vocab.txt" \
-    -o vocab.txt
+        "https://huggingface.co/Xenova/bge-small-en-v1.5/resolve/main/onnx/model.onnx" \
+        -o model.onnx \
+    && curl -fSL \
+        "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main/vocab.txt" \
+        -o vocab.txt \
+    && echo "${MODEL_SHA256}  model.onnx" | sha256sum -c - \
+    && echo "${VOCAB_SHA256}  vocab.txt"  | sha256sum -c -
 
 # ── Build Stage ──────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
@@ -68,7 +93,13 @@ COPY --from=model-fetch /models /app/models
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 # Enable ONNX provider by default in the container image.
-# Override with Embedding__Provider=OpenAi to revert to the cloud path.
+#
+# WARNING: do NOT override with Embedding__Provider=OpenAi without also
+# migrating the pgvector column from vector(384) to vector(3072). The
+# column is currently vector(384) matching bge-small-en-v1.5. OpenAI
+# text-embedding-3-large emits 3072-dimensional vectors; inserting them
+# into a 384-column fails with a dimension mismatch error. A new EF
+# migration is required before switching providers.
 ENV Embedding__Provider=Onnx
 ENV Embedding__ModelPath=models/bge-small-en-v1.5/model.onnx
 ENV Embedding__TokenizerPath=models/bge-small-en-v1.5/vocab.txt
