@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\OmniSift.Api\OmniSift.Api.csproj" />
     <ProjectReference Include="..\..\src\OmniSift.Shared\OmniSift.Shared.csproj" />
+    <ProjectReference Include="..\..\src\OmniSift.Web\OmniSift.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
 using OmniSift.Api.Plugins;
+using OmniSift.Api.Services;
 
 namespace OmniSift.UnitTests.Plugins;
 
@@ -89,6 +90,9 @@ public sealed class WaybackMachinePluginTests
             });
 
         var httpClient = new HttpClient(handlerMock.Object);
-        return new WaybackMachinePlugin(httpClient, Mock.Of<ILogger<WaybackMachinePlugin>>());
+        return new WaybackMachinePlugin(
+            httpClient,
+            Mock.Of<ICitationAccumulator>(),
+            Mock.Of<ILogger<WaybackMachinePlugin>>());
     }
 }

@@ -1,0 +1,55 @@
+using System.IdentityModel.Tokens.Jwt;
+using FluentAssertions;
+using Microsoft.Extensions.Options;
+using OmniSift.Api.Models;
+using OmniSift.Api.Options;
+using OmniSift.Api.Services;
+
+namespace OmniSift.UnitTests.Services;
+
+public sealed class JwtTokenServiceTests
+{
+    private static JwtTokenService BuildService(string secret = "test-secret-key-must-be-at-least-32-ch!")
+    {
+        var opts = Options.Create(new JwtOptions
+        {
+            Secret = secret,
+            Issuer = "TestIssuer",
+            Audience = "TestAudience",
+            ExpiryMinutes = 30
+        });
+        return new JwtTokenService(opts);
+    }
+
+    [Fact]
+    public void CreateToken_ContainsExpectedClaims()
+    {
+        var svc = BuildService();
+        var userId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+
+        var user = new AppUser
+        {
+            Id = userId,
+            TenantId = tenantId,
+            Email = "test@example.com",
+            Role = "owner"
+        };
+
+        var (tokenString, expiresAt) = svc.CreateToken(user);
+
+        tokenString.Should().NotBeNullOrWhiteSpace();
+        expiresAt.Should().BeAfter(DateTime.UtcNow);
+
+        var handler = new JwtSecurityTokenHandler();
+        handler.CanReadToken(tokenString).Should().BeTrue();
+
+        var jwt = handler.ReadJwtToken(tokenString);
+
+        jwt.Subject.Should().Be(userId.ToString());
+        jwt.Claims.Should().Contain(c => c.Type == "tenant_id" && c.Value == tenantId.ToString());
+        jwt.Claims.Should().Contain(c => c.Type == JwtRegisteredClaimNames.Email && c.Value == "test@example.com");
+        jwt.Claims.Should().Contain(c => c.Type == "role" && c.Value == "owner");
+        jwt.Issuer.Should().Be("TestIssuer");
+    }
+}
