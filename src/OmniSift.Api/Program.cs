@@ -4,8 +4,10 @@
 // ============================================================
 
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.SemanticKernel;
 using OmniSift.Api.Data;
 using OmniSift.Api.Infrastructure;
@@ -124,6 +126,9 @@ try
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<ITenantContext, TenantContext>();
 
+    // ── Citation Accumulator (per-request) ──────────────────────
+    builder.Services.AddScoped<ICitationAccumulator, CitationAccumulator>();
+
     // ── HTTP Clients ────────────────────────────────────────────
     builder.Services.AddHttpClient();
 
@@ -180,8 +185,19 @@ try
     builder.Services.AddKeyedScoped<ITextExtractor, PdfTextExtractor>("pdf");
     builder.Services.AddKeyedScoped<ITextExtractor, SmsTextExtractor>("sms");
     builder.Services.AddKeyedScoped<ITextExtractor, WebTextExtractor>("web");
+    builder.Services.AddKeyedScoped<ITextExtractor, DocxTextExtractor>("docx");
+    builder.Services.AddKeyedScoped<ITextExtractor, EmailTextExtractor>("email");
 
     builder.Services.AddScoped<IDocumentIngestionService, DocumentIngestionService>();
+
+    // Async ingestion pipeline via System.Threading.Channels.
+    // IngestionChannel is the shared queue (singleton).
+    // IngestionBackgroundService drains it in a hosted background loop.
+    // BackgroundIngestionService runs the actual extract→chunk→embed work
+    // in a fresh DI scope per item (with RLS re-established from the work item tenantId).
+    builder.Services.AddSingleton<IngestionChannel>();
+    builder.Services.AddScoped<IBackgroundIngestionService, BackgroundIngestionService>();
+    builder.Services.AddHostedService<IngestionBackgroundService>();
 
     // ── Semantic Kernel ─────────────────────────────────────────
     // Named HttpClient for the Anthropic-compatible endpoint (avoids leaked HttpClient)
@@ -275,6 +291,30 @@ try
         });
     });
 
+    // ── JWT Auth ────────────────────────────────────────────────
+    builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            var jwtOpts = builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = jwtOpts.Issuer,
+                ValidAudience = jwtOpts.Audience,
+                IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtOpts.Secret))
+            };
+        });
+    builder.Services.AddAuthorization();
+
+    // ── Auth Services ───────────────────────────────────────────
+    builder.Services.AddSingleton<IPasswordHasher, PasswordHasherService>();
+    builder.Services.AddSingleton<JwtTokenService>();
+    builder.Services.AddScoped<IAuditLogger, AuditLogger>();
+
     // ── Rate Limiting (per-tenant token bucket) ─────────────────
     builder.Services.AddRateLimiter(options =>
     {
@@ -343,6 +383,9 @@ try
 
     app.UseCors();
     app.UseRateLimiter();
+
+    app.UseAuthentication();
+    app.UseAuthorization();
 
     // API key authentication (must run before tenant resolution)
     app.UseApiKeyAuth();

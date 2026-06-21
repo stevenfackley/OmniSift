@@ -23,6 +23,19 @@ namespace OmniSift.Shared;
 [JsonSerializable(typeof(IngestionResponse))]
 [JsonSerializable(typeof(List<ConversationMessage>))]
 [JsonSerializable(typeof(List<SourceCitation>))]
+[JsonSerializable(typeof(GenerateReportRequest))]
+[JsonSerializable(typeof(GenerateReportResponse))]
+[JsonSerializable(typeof(ReportTurn))]
+[JsonSerializable(typeof(List<ReportTurn>))]
+[JsonSerializable(typeof(AuditLogDto))]
+[JsonSerializable(typeof(List<AuditLogDto>))]
+[JsonSerializable(typeof(TenantExportDto))]
+[JsonSerializable(typeof(QueryHistoryDto))]
+[JsonSerializable(typeof(List<QueryHistoryDto>))]
+[JsonSerializable(typeof(DeleteAccountDataRequest))]
+[JsonSerializable(typeof(RegisterRequest))]
+[JsonSerializable(typeof(LoginRequest))]
+[JsonSerializable(typeof(AuthResponse))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

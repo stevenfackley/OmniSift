@@ -27,12 +27,15 @@ public class OmniSiftDbContext : DbContext
     public DbSet<DataSource> DataSources => Set<DataSource>();
     public DbSet<DocumentChunk> DocumentChunks => Set<DocumentChunk>();
     public DbSet<QueryHistory> QueryHistories => Set<QueryHistory>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<AppUser> Users => Set<AppUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // Enable pgvector extension
+        // Enable extensions
+        modelBuilder.HasPostgresExtension("pg_trgm");  // trigram keyword search arm
         modelBuilder.HasPostgresExtension("uuid-ossp");
         modelBuilder.HasPostgresExtension("vector");
 
@@ -147,6 +150,50 @@ public class OmniSiftDbContext : DbContext
 
             entity.HasIndex(e => e.TenantId);
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+        });
+
+        // ── AuditLog ────────────────────────────────────
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.ToTable("audit_log");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.TenantId).HasColumnName("tenant_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Action).HasColumnName("action").HasMaxLength(128).IsRequired();
+            entity.Property(e => e.ResourceType).HasColumnName("resource_type").HasMaxLength(128).IsRequired();
+            entity.Property(e => e.ResourceId).HasColumnName("resource_id");
+            entity.Property(e => e.IpAddress).HasColumnName("ip_address").HasMaxLength(64);
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+
+            entity.HasOne(e => e.Tenant)
+                  .WithMany(t => t.AuditLogs)
+                  .HasForeignKey(e => e.TenantId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TenantId);
+            entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+        });
+
+        // ── AppUser ─────────────────────────────────────
+        modelBuilder.Entity<AppUser>(entity =>
+        {
+            entity.ToTable("users");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.TenantId).HasColumnName("tenant_id");
+            entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(256).IsRequired();
+            entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired();
+            entity.Property(e => e.Role).HasColumnName("role").HasMaxLength(64).HasDefaultValue("member");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
+
+            entity.HasIndex(e => e.Email).IsUnique();
+            entity.HasIndex(e => e.TenantId);
+
+            entity.HasOne(e => e.Tenant)
+                  .WithMany(t => t.Users)
+                  .HasForeignKey(e => e.TenantId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using OmniSift.Api.Options;
+using OmniSift.Api.Services;
 
 namespace OmniSift.Api.Plugins;
 
@@ -16,10 +17,12 @@ namespace OmniSift.Api.Plugins;
 /// Semantic Kernel plugin that searches the web using Tavily API.
 /// The agent invokes this to find current information not available
 /// in the tenant's uploaded documents.
+/// Also records results in <see cref="ICitationAccumulator"/>.
 /// </summary>
 public sealed class WebScraperPlugin(
     HttpClient httpClient,
     IOptions<TavilyOptions> tavilyOptions,
+    ICitationAccumulator citations,
     ILogger<WebScraperPlugin> logger)
 {
     private readonly string _apiKey = tavilyOptions.Value.ApiKey;
@@ -83,6 +86,13 @@ public sealed class WebScraperPlugin(
             };
 
             logger.LogInformation("WebSearch returned {Count} results for query", result.Results.Count);
+
+            // Record citations
+            foreach (var r in result.Results)
+            {
+                var snippet = r.Content?.Length > 300 ? r.Content[..300] + "…" : r.Content;
+                citations.AddWebResult(r.Url, r.Title, r.Score, snippet);
+            }
 
             return JsonSerializer.Serialize(formattedResults, new JsonSerializerOptions { WriteIndented = true });
         }
