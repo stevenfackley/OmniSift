@@ -6,6 +6,11 @@ publish/
 **/Release/
 **/Debug/
 
+# Local ML model artifacts (e.g. bge-small-en-v1.5 ONNX, ~133 MB) — never commit
+models/
+.verify-publish/
+.verify-site/
+
 # Test results
 [Tt]est[Rr]esults/
 *.trx
