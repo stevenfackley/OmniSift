@@ -1,3 +1,7 @@
+@inject AuthStateService Auth
+@inject NavigationManager Nav
+@implements IDisposable
+
 <nav class="sidebar">
     <div class="sidebar-brand">
         <span class="node-mark">&gt;o)</span> Omni<span>Sift</span>
@@ -18,5 +22,48 @@
             <span class="nav-icon">▤</span>
             Data Sources
         </NavLink>
+
+        <NavLink class="nav-link" href="entities">
+            <span class="nav-icon">⬡</span>
+            Entities
+        </NavLink>
+    </div>
+
+    <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border);">
+        @if (Auth.IsAuthenticated)
+        {
+            <button class="btn btn-outline btn-sm" style="width: 100%;" @onclick="SignOut">
+                Sign out
+            </button>
+        }
+        else
+        {
+            <a href="/login" class="btn btn-outline btn-sm" style="width: 100%; justify-content: center;">
+                Sign in
+            </a>
+        }
     </div>
 </nav>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Auth.OnAuthChanged += HandleAuthChanged;
+    }
+
+    private void HandleAuthChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SignOut()
+    {
+        await Auth.SignOutAsync().ConfigureAwait(false);
+        Nav.NavigateTo("/");
+    }
+
+    public void Dispose()
+    {
+        Auth.OnAuthChanged -= HandleAuthChanged;
+    }
+}

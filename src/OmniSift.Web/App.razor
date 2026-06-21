@@ -1,3 +1,5 @@
+@inject OmniSift.Web.Services.AuthStateService Auth
+
 <Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)" />
@@ -18,3 +20,10 @@
         </LayoutView>
     </NotFound>
 </Router>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync().ConfigureAwait(false);
+    }
+}

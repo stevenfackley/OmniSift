@@ -1,0 +1,121 @@
+@page "/login"
+@inject OmniSiftApiClient Api
+@inject AuthStateService Auth
+@inject NavigationManager Nav
+
+<PageTitle>OmniSift — Sign In</PageTitle>
+
+<div style="display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 120px); padding: 2rem;">
+    <div style="width: 100%; max-width: 420px;">
+        <div class="page-header" style="position: static; border: none; padding: 0; margin-bottom: 1.75rem; background: transparent; backdrop-filter: none;">
+            <span class="kicker">Account</span>
+            <h1>Sign In</h1>
+        </div>
+
+        <div class="card">
+            <div class="form-group">
+                <label class="form-label" for="email">Email</label>
+                <input id="email" type="email" class="form-input"
+                       @bind="_email" @bind:event="oninput"
+                       placeholder="you@example.com"
+                       disabled="@_busy" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input id="password" type="password" class="form-input"
+                       @bind="_password" @bind:event="oninput"
+                       placeholder="••••••••"
+                       disabled="@_busy"
+                       @onkeydown="HandleKeyDown" />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="tenant">Tenant ID</label>
+                <input id="tenant" type="text" class="form-input"
+                       @bind="_tenantId" @bind:event="oninput"
+                       placeholder="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                       disabled="@_busy" />
+                <p style="font-size: 0.78rem; color: var(--text-faint); margin-top: 0.3rem;">
+                    Leave blank to use the default dev tenant.
+                </p>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert alert-error">@_error</div>
+            }
+
+            <button class="btn btn-primary" style="width: 100%;"
+                    @onclick="DoLogin"
+                    disabled="@(_busy || !CanSubmit)">
+                @if (_busy)
+                {
+                    <span class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></span>
+                    <span>Signing in…</span>
+                }
+                else
+                {
+                    <span>Sign in</span>
+                }
+            </button>
+
+            <p style="margin-top: 1.25rem; font-size: 0.88rem; color: var(--text-muted); text-align: center;">
+                No account? <a href="/register">Create one →</a>
+            </p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string _tenantId = string.Empty;
+    private bool _busy;
+    private string? _error;
+
+    private bool CanSubmit => !string.IsNullOrWhiteSpace(_email) && !string.IsNullOrWhiteSpace(_password);
+
+    private async Task DoLogin()
+    {
+        if (!CanSubmit || _busy)
+            return;
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var tid = Guid.TryParse(_tenantId.Trim(), out var parsed)
+                ? parsed
+                : Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+
+            var req = new OmniSift.Shared.DTOs.LoginRequest
+            {
+                Email = _email.Trim(),
+                Password = _password,
+                TenantId = tid
+            };
+
+            var result = await Api.LoginAsync(req).ConfigureAwait(false);
+            await Auth.SignInAsync(result.Token, result.TenantId).ConfigureAwait(false);
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message.Contains("401") || ex.Message.Contains("Unauthorized")
+                ? "Invalid email or password."
+                : $"Sign-in failed: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await DoLogin().ConfigureAwait(false);
+    }
+}

@@ -1,4 +1,5 @@
 @page "/agent"
+@inject IJSRuntime JS
 
 <PageTitle>OmniSift — Research Agent</PageTitle>
 
@@ -17,7 +18,7 @@
                     <p style="font-family: var(--display); font-size: 1.5rem; color: var(--text);">
                         Search your documents, the web, and the archive.
                     </p>
-                    <p class="hint">Try: “What addresses did John Smith live at?” or “Find information about…”</p>
+                    <p class="hint">Try: "What addresses did John Smith live at?" or "Find information about…"</p>
                     <ul class="source-tags">
                         <li>&#9656; PDF</li>
                         <li>&#9656; SMS</li>
@@ -93,11 +94,17 @@
                 </div>
             }
 
-            @if (_isLoading)
+            @if (_isStreaming && !string.IsNullOrEmpty(_streamBuffer))
+            {
+                <div class="chat-message assistant">
+                    <div class="chat-md">@((MarkupString)_md.Render(_streamBuffer))</div>
+                </div>
+            }
+            else if (_isLoading)
             {
                 <div class="chat-message assistant">
                     <div class="spinner" style="width: 24px; height: 24px; border-width: 3px;"></div>
-                    <span style="margin-left: 0.5rem; color: var(--text-muted);">Thinking...</span>
+                    <span style="margin-left: 0.5rem; color: var(--text-muted);">Thinking…</span>
                 </div>
             }
         </div>
@@ -116,6 +123,23 @@
     </div>
 </div>
 
+@if (_messages.Count > 0)
+{
+    <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+        <button class="btn btn-outline btn-sm" @onclick="DownloadPdf" disabled="@(_isLoading || _pdfDownloading)">
+            @if (_pdfDownloading)
+            {
+                <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
+                <span>Generating…</span>
+            }
+            else
+            {
+                <span>⬇ Download report (PDF)</span>
+            }
+        </button>
+    </div>
+}
+
 @if (!string.IsNullOrWhiteSpace(_error))
 {
     <div class="alert alert-error" style="margin-top: 1rem;">@_error</div>
@@ -128,6 +152,9 @@
     private ElementReference _messagesDiv;
     private string _currentQuery = string.Empty;
     private bool _isLoading;
+    private bool _isStreaming;
+    private bool _pdfDownloading;
+    private string _streamBuffer = string.Empty;
     private string? _error;
     private readonly List<ChatMessage> _messages = [];
     private readonly List<ConversationMessage> _conversationHistory = [];
@@ -141,42 +168,139 @@
         _currentQuery = string.Empty;
         _error = null;
 
-        // Add user message
         _messages.Add(new ChatMessage("user", query));
         _isLoading = true;
+        _streamBuffer = string.Empty;
         StateHasChanged();
+
+        var request = new AgentQueryRequest
+        {
+            Query = query,
+            ConversationHistory = _conversationHistory.Count > 0
+                ? _conversationHistory.TakeLast(10).ToList()
+                : null
+        };
 
         try
         {
-            var request = new AgentQueryRequest
-            {
-                Query = query,
-                ConversationHistory = _conversationHistory.Count > 0
-                    ? _conversationHistory.TakeLast(10).ToList()
-                    : null
-            };
-
-            var response = await Api.QueryAgentAsync(request).ConfigureAwait(false);
-
-            // Add assistant message
-            _messages.Add(new ChatMessage("assistant", response.Response)
-            {
-                PluginsUsed = response.PluginsUsed,
-                DurationMs = response.DurationMs,
-                Sources = response.Sources
-            });
-
-            // Update conversation history
-            _conversationHistory.Add(new ConversationMessage { Role = "user", Content = query });
-            _conversationHistory.Add(new ConversationMessage { Role = "assistant", Content = response.Response });
+            await StreamQueryAsync(request, query).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch
         {
-            _error = $"Error: {ex.Message}";
+            // Streaming failed — fall back to non-streaming
+            try
+            {
+                _isStreaming = false;
+                _streamBuffer = string.Empty;
+                await FallbackQueryAsync(request, query).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _error = $"Error: {ex.Message}";
+            }
         }
         finally
         {
             _isLoading = false;
+            _isStreaming = false;
+            _streamBuffer = string.Empty;
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private async Task StreamQueryAsync(AgentQueryRequest request, string query)
+    {
+        _isStreaming = true;
+
+        var contentBuilder = new System.Text.StringBuilder();
+        List<string>? pluginsUsed = null;
+        int durationMs = 0;
+        List<SourceCitation>? sources = null;
+
+        await foreach (var evt in Api.QueryAgentStreamAsync(request))
+        {
+            switch (evt)
+            {
+                case SseEvent.Delta delta:
+                    contentBuilder.Append(delta.Content);
+                    _streamBuffer = contentBuilder.ToString();
+                    await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+                    break;
+
+                case SseEvent.Final final:
+                    pluginsUsed = final.Data.PluginsUsed;
+                    durationMs = final.Data.DurationMs;
+                    sources = final.Data.Sources;
+                    break;
+            }
+        }
+
+        var responseText = contentBuilder.ToString();
+        if (string.IsNullOrEmpty(responseText))
+            throw new InvalidOperationException("Empty stream response.");
+
+        _messages.Add(new ChatMessage("assistant", responseText)
+        {
+            PluginsUsed = pluginsUsed,
+            DurationMs = durationMs,
+            Sources = sources
+        });
+
+        _conversationHistory.Add(new ConversationMessage { Role = "user", Content = query });
+        _conversationHistory.Add(new ConversationMessage { Role = "assistant", Content = responseText });
+    }
+
+    private async Task FallbackQueryAsync(AgentQueryRequest request, string query)
+    {
+        var response = await Api.QueryAgentAsync(request).ConfigureAwait(false);
+
+        _messages.Add(new ChatMessage("assistant", response.Response)
+        {
+            PluginsUsed = response.PluginsUsed,
+            DurationMs = response.DurationMs,
+            Sources = response.Sources
+        });
+
+        _conversationHistory.Add(new ConversationMessage { Role = "user", Content = query });
+        _conversationHistory.Add(new ConversationMessage { Role = "assistant", Content = response.Response });
+    }
+
+    private async Task DownloadPdf()
+    {
+        if (_pdfDownloading || _messages.Count == 0)
+            return;
+
+        _pdfDownloading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var turns = _messages
+                .Select(m => new ReportTurn
+                {
+                    Role = m.Role,
+                    Content = m.Content,
+                    Citations = m.Sources ?? []
+                })
+                .ToList();
+
+            var reportRequest = new GenerateReportRequest
+            {
+                Title = "OmniSift Research Report",
+                Messages = turns
+            };
+
+            var pdfBytes = await Api.GenerateReportPdfAsync(reportRequest).ConfigureAwait(false);
+            await JS.InvokeVoidAsync("downloadBlobFile", "report.pdf", "application/pdf", pdfBytes).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _error = $"PDF export failed: {ex.Message}";
+        }
+        finally
+        {
+            _pdfDownloading = false;
             StateHasChanged();
         }
     }
@@ -184,12 +308,9 @@
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter" && !e.ShiftKey)
-        {
             await SendQuery().ConfigureAwait(false);
-        }
     }
 
-    /// <summary>HTML-escapes user text so it is safe to embed as MarkupString.</summary>
     private static string EscapeHtml(string content) =>
         content
             .Replace("&", "&amp;")
