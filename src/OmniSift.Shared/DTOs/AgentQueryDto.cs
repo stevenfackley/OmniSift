@@ -75,4 +75,8 @@ public sealed record SourceCitation
     public string? Url { get; init; }
     public string? Title { get; init; }
     public double? RelevanceScore { get; init; }
+    /// <summary>
+    /// Short excerpt (≤ 300 chars) from the cited source. Optional.
+    /// </summary>
+    public string? Snippet { get; init; }
 }

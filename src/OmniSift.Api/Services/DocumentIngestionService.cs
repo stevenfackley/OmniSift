@@ -38,6 +38,8 @@ public sealed class DocumentIngestionService(
     [FromKeyedServices("pdf")] ITextExtractor pdfExtractor,
     [FromKeyedServices("sms")] ITextExtractor smsExtractor,
     [FromKeyedServices("web")] ITextExtractor webExtractor,
+    [FromKeyedServices("docx")] ITextExtractor docxExtractor,
+    [FromKeyedServices("email")] ITextExtractor emailExtractor,
     ITextChunker chunker,
     IEmbeddingService embeddingService,
     ILogger<DocumentIngestionService> logger) : IDocumentIngestionService
@@ -45,7 +47,7 @@ public sealed class DocumentIngestionService(
     /// <summary>
     /// Allowed source types.
     /// </summary>
-    private static readonly HashSet<string> AllowedSourceTypes = ["pdf", "sms", "web"];
+    private static readonly HashSet<string> AllowedSourceTypes = ["pdf", "sms", "web", "docx", "email"];
 
     /// <summary>
     /// Batch size for embedding generation.
@@ -75,9 +77,11 @@ public sealed class DocumentIngestionService(
         // Resolve the correct extractor for this source type via keyed DI
         var extractor = sourceType switch
         {
-            "pdf" => pdfExtractor,
-            "sms" => smsExtractor,
-            "web" => webExtractor,
+            "pdf"   => pdfExtractor,
+            "sms"   => smsExtractor,
+            "web"   => webExtractor,
+            "docx"  => docxExtractor,
+            "email" => emailExtractor,
             _ => throw new InvalidOperationException($"No text extractor registered for source type: {sourceType}")
         };
 

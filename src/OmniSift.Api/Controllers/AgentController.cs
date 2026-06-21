@@ -11,6 +11,7 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using OmniSift.Api.Data;
 using OmniSift.Api.Middleware;
 using OmniSift.Api.Models;
+using OmniSift.Api.Services;
 using OmniSift.Shared.DTOs;
 
 namespace OmniSift.Api.Controllers;
@@ -22,6 +23,8 @@ public sealed class AgentController(
     Kernel kernel,
     OmniSiftDbContext dbContext,
     ITenantContext tenantContext,
+    ICitationAccumulator citationAccumulator,
+    IAuditLogger auditLogger,
     ILogger<AgentController> logger) : ControllerBase
 {
     /// <summary>
@@ -126,16 +129,57 @@ public sealed class AgentController(
         dbContext.QueryHistories.Add(queryHistory);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        await auditLogger.LogAsync("agent_query", "query_history", queryHistory.Id, cancellationToken).ConfigureAwait(false);
+
         logger.LogInformation(
             "Agent query completed in {DurationMs}ms, plugins={Plugins}",
             sw.ElapsedMilliseconds, string.Join(", ", pluginsUsed));
+
+        var sources = citationAccumulator.GetCitations();
 
         return Ok(new AgentQueryResponse
         {
             Response = responseText,
             PluginsUsed = pluginsUsed,
             DurationMs = (int)sw.ElapsedMilliseconds,
-            Sources = [] // Sources are embedded in the response text by the agent
+            Sources = [.. sources]
+        });
+    }
+
+    /// <summary>
+    /// Generate a formatted Markdown research report from a conversation
+    /// with its associated citations.
+    /// </summary>
+    [HttpPost("report")]
+    public ActionResult<GenerateReportResponse> GenerateReport(
+        [FromBody] GenerateReportRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var now = DateTime.UtcNow;
+        var timestamp = now.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var title = string.IsNullOrWhiteSpace(request.Title) ? "Research Report" : request.Title;
+
+        var reportRequest = new ReportRequest
+        {
+            Title = title,
+            Timestamp = timestamp,
+            Messages = [.. request.Messages.Select(m => new ReportMessage
+            {
+                Role = m.Role,
+                Content = m.Content,
+                Citations = [.. m.Citations]
+            })]
+        };
+
+        var markdown = ResearchReportBuilder.Build(reportRequest, now);
+
+        return Ok(new GenerateReportResponse
+        {
+            Markdown = markdown,
+            Title = title,
+            GeneratedAt = timestamp
         });
     }
 }

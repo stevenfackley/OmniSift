@@ -4,6 +4,7 @@
 // ============================================================
 
 using System.Collections.Frozen;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,8 @@ public sealed class DataSourcesController(
     OmniSiftDbContext dbContext,
     ITenantContext tenantContext,
     IDocumentIngestionService ingestionService,
+    IngestionChannel ingestionChannel,
+    IAuditLogger auditLogger,
     ILogger<DataSourcesController> logger) : ControllerBase
 {
     /// <summary>
@@ -30,7 +33,7 @@ public sealed class DataSourcesController(
     private const long MaxFileSize = 50 * 1024 * 1024;
 
     /// <summary>
-    /// Allowed MIME types for file uploads.
+    /// Allowed MIME types for file uploads mapped to their ingestion source-type key.
     /// FrozenDictionary provides optimised read-only lookups for this static mapping.
     /// </summary>
     private static readonly FrozenDictionary<string, string> AllowedMimeTypes =
@@ -39,12 +42,19 @@ public sealed class DataSourcesController(
             ["application/pdf"] = "pdf",
             ["text/csv"] = "sms",
             ["application/json"] = "sms",
-            ["text/html"] = "web"
+            ["text/html"] = "web",
+            // Word documents
+            ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] = "docx",
+            ["application/msword"] = "docx",
+            // Email formats (RFC-2822 / MBOX)
+            ["message/rfc822"] = "email",
+            ["application/mbox"] = "email"
         }.ToFrozenDictionary();
 
     /// <summary>
-    /// Upload a file for ingestion into the document pipeline.
-    /// Accepts PDF, CSV (SMS), JSON (SMS), and HTML files.
+    /// Upload a file for asynchronous ingestion into the document pipeline.
+    /// Accepts PDF, CSV/JSON (SMS), HTML, DOCX, and EML/MBOX (email) files.
+    /// Returns 202 Accepted immediately; poll GET /api/datasources/{id} for status.
     /// </summary>
     [HttpPost("upload")]
     [RequestSizeLimit(MaxFileSize)]
@@ -79,21 +89,66 @@ public sealed class DataSourcesController(
             }
         }
 
+        var tenantId = tenantContext.TenantId;
+
         logger.LogInformation(
             "Upload request: file={FileName}, size={Size}, type={SourceType}, tenant={TenantId}",
-            file.FileName, file.Length, resolvedSourceType, tenantContext.TenantId);
+            file.FileName, file.Length, resolvedSourceType, tenantId);
 
-        using var stream = file.OpenReadStream();
-        var dataSource = await ingestionService.IngestAsync(
-            stream, resolvedSourceType, file.FileName, cancellationToken: cancellationToken).ConfigureAwait(false);
+        // Buffer the file into memory before the HTTP request ends.
+        // The background worker runs after the response is sent so
+        // the IFormFile stream will be disposed by then.
+        byte[] content;
+        using (var ms = new MemoryStream((int)file.Length))
+        {
+            await file.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+            content = ms.ToArray();
+        }
 
-        return Ok(new IngestionResponse
+        // Create the DataSource record synchronously in this request
+        // so the client has an ID to poll immediately.
+        var dataSource = new DataSource
+        {
+            TenantId = tenantId,
+            SourceType = resolvedSourceType,
+            FileName = file.FileName,
+            Status = IngestionStatus.Pending
+        };
+
+        dbContext.DataSources.Add(dataSource);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        await auditLogger.LogAsync("upload", "data_source", dataSource.Id, cancellationToken).ConfigureAwait(false);
+
+        // Enqueue for background processing. The worker carries tenantId
+        // and sets the PG session variable itself to preserve RLS.
+        var workItem = new IngestionWorkItem(
+            DataSourceId: dataSource.Id,
+            TenantId: tenantId,
+            SourceType: resolvedSourceType,
+            FileName: file.FileName,
+            Content: content);
+
+        try
+        {
+            await ingestionChannel.Writer.WriteAsync(workItem, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ChannelClosedException)
+        {
+            logger.LogError("Ingestion channel is closed; cannot enqueue DataSource {DataSourceId}", dataSource.Id);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = "Ingestion service unavailable. Please try again shortly." });
+        }
+
+        logger.LogInformation(
+            "DataSource {DataSourceId} enqueued for background ingestion (tenant={TenantId})",
+            dataSource.Id, tenantId);
+
+        return Accepted(new IngestionResponse
         {
             DataSourceId = dataSource.Id,
             Status = dataSource.Status.ToString().ToLowerInvariant(),
-            Message = dataSource.Status == IngestionStatus.Completed
-                ? "File uploaded and processed successfully."
-                : $"Ingestion {dataSource.Status.ToString().ToLowerInvariant()}: {dataSource.ErrorMessage}"
+            Message = "File accepted. Poll GET /api/datasources/{id} for ingestion status."
         });
     }
 
@@ -207,6 +262,8 @@ public sealed class DataSourcesController(
 
         dbContext.DataSources.Remove(source);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        await auditLogger.LogAsync("delete", "data_source", id, cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "Deleted DataSource {DataSourceId} for tenant {TenantId}",

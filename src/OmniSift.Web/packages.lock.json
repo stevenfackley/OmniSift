@@ -2,6 +2,12 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
+      "Markdig": {
+        "type": "Direct",
+        "requested": "[0.40.0, )",
+        "resolved": "0.40.0",
+        "contentHash": "4ve14zs+gt1irldTQE3y5FLAHuzmhW7T99lAAvVipe/q2LWT/nUCO0iICb9TXGvMX6n7Z1OZroFXkdSy91rO8w=="
+      },
       "Microsoft.AspNetCore.App.Internal.Assets": {
         "type": "Direct",
         "requested": "[10.0.9, )",
@@ -49,9 +55,9 @@
       },
       "Microsoft.NET.Sdk.WebAssembly.Pack": {
         "type": "Direct",
-        "requested": "[10.0.8, )",
-        "resolved": "10.0.8",
-        "contentHash": "xQ05xw4t8wjFxwD7a/Nye/IPEihIyUkZIbRzTytVFqko6Ows3UvjqHIEjk3gCOIZloNFOLykYPsTyKRCvEs6ng=="
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "VZrxevxXB2tmpyRKTbvVCNUt3GsJiOvWokwa7G328bQf7rKap9cNHPWrtPzTAWNphL7b6byHclNu1jc4QXv46w=="
       },
       "Microsoft.AspNetCore.Authorization": {
         "type": "Transitive",

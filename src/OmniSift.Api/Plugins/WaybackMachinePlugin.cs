@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.SemanticKernel;
+using OmniSift.Api.Services;
 
 namespace OmniSift.Api.Plugins;
 
@@ -14,9 +15,11 @@ namespace OmniSift.Api.Plugins;
 /// Semantic Kernel plugin that queries the Wayback Machine API
 /// to find archived snapshots of web pages. Useful for historical
 /// research and recovering removed or changed web content.
+/// Also records results in <see cref="ICitationAccumulator"/>.
 /// </summary>
 public sealed class WaybackMachinePlugin(
     HttpClient httpClient,
+    ICitationAccumulator citations,
     ILogger<WaybackMachinePlugin> logger)
 {
     [KernelFunction("GetArchivedPage")]
@@ -54,6 +57,9 @@ public sealed class WaybackMachinePlugin(
             logger.LogInformation(
                 "Wayback Machine snapshot found for {Url}: {SnapshotUrl} ({Timestamp})",
                 url, snapshot.Url, snapshot.Timestamp);
+
+            // Record citation
+            citations.AddArchivedPage(snapshot.Url, url, snapshot.Timestamp);
 
             return JsonSerializer.Serialize(new
             {

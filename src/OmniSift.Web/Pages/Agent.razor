@@ -3,7 +3,8 @@
 <PageTitle>OmniSift — Research Agent</PageTitle>
 
 <div class="page-header">
-    <h1>🤖 Research Agent</h1>
+    <span class="kicker">Research Agent</span>
+    <h1>Ask anything. Get it sourced.</h1>
 </div>
 
 <div class="card" style="margin-top: 1.5rem;">
@@ -11,19 +12,69 @@
         <div class="chat-messages" @ref="_messagesDiv">
             @if (_messages.Count == 0)
             {
-                <div style="text-align: center; color: var(--text-muted); padding: 3rem 0;">
-                    <p style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</p>
-                    <p>Ask a question to search your documents, the web, and archives.</p>
-                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">
-                        Try: "What addresses did John Smith live at?" or "Find information about..."
+                <div class="empty-state">
+                    <span class="eyebrow">▸ ready</span>
+                    <p style="font-family: var(--display); font-size: 1.5rem; color: var(--text);">
+                        Search your documents, the web, and the archive.
                     </p>
+                    <p class="hint">Try: “What addresses did John Smith live at?” or “Find information about…”</p>
+                    <ul class="source-tags">
+                        <li>&#9656; PDF</li>
+                        <li>&#9656; SMS</li>
+                        <li>&#9656; WEB</li>
+                        <li>&#9656; ARCHIVE</li>
+                    </ul>
                 </div>
             }
 
             @foreach (var msg in _messages)
             {
                 <div class="chat-message @msg.Role">
-                    <div>@((MarkupString)FormatMessage(msg.Content))</div>
+                    @if (msg.Role == "assistant")
+                    {
+                        <div class="chat-md">@((MarkupString)_md.Render(msg.Content))</div>
+                    }
+                    else
+                    {
+                        <div>@((MarkupString)EscapeHtml(msg.Content))</div>
+                    }
+
+                    @if (msg.Sources?.Count > 0)
+                    {
+                        <div class="citations">
+                            <div class="citations-label">Sources</div>
+                            <ul class="citations-list">
+                                @foreach (var src in msg.Sources)
+                                {
+                                    <li class="citation-card">
+                                        <span class="citation-type">@src.Type</span>
+                                        @if (!string.IsNullOrWhiteSpace(src.Title))
+                                        {
+                                            <span class="citation-title">
+                                                @if (!string.IsNullOrWhiteSpace(src.Url))
+                                                {
+                                                    <a href="@src.Url" target="_blank" rel="noopener noreferrer">@src.Title</a>
+                                                }
+                                                else
+                                                {
+                                                    @src.Title
+                                                }
+                                            </span>
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(src.Url))
+                                        {
+                                            <a class="citation-url" href="@src.Url" target="_blank" rel="noopener noreferrer">@src.Url</a>
+                                        }
+                                        @if (src.RelevanceScore.HasValue)
+                                        {
+                                            <span class="citation-score">@(src.RelevanceScore.Value.ToString("F2"))</span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
                     @if (msg.PluginsUsed?.Count > 0)
                     {
                         <div class="chat-plugins">
@@ -72,6 +123,7 @@
 
 @code {
     [Inject] private OmniSiftApiClient Api { get; set; } = default!;
+    [Inject] private MarkdownService _md { get; set; } = default!;
 
     private ElementReference _messagesDiv;
     private string _currentQuery = string.Empty;
@@ -104,13 +156,14 @@
                     : null
             };
 
-            var response = await Api.QueryAgentAsync(request);
+            var response = await Api.QueryAgentAsync(request).ConfigureAwait(false);
 
             // Add assistant message
             _messages.Add(new ChatMessage("assistant", response.Response)
             {
                 PluginsUsed = response.PluginsUsed,
-                DurationMs = response.DurationMs
+                DurationMs = response.DurationMs,
+                Sources = response.Sources
             });
 
             // Update conversation history
@@ -132,25 +185,24 @@
     {
         if (e.Key == "Enter" && !e.ShiftKey)
         {
-            await SendQuery();
+            await SendQuery().ConfigureAwait(false);
         }
     }
 
-    private static string FormatMessage(string content)
-    {
-        // Basic formatting: convert newlines to <br> and wrap code blocks
-        return content
+    /// <summary>HTML-escapes user text so it is safe to embed as MarkupString.</summary>
+    private static string EscapeHtml(string content) =>
+        content
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
             .Replace(">", "&gt;")
             .Replace("\n", "<br/>");
-    }
 
     private sealed class ChatMessage
     {
         public string Role { get; }
         public string Content { get; }
         public List<string>? PluginsUsed { get; init; }
+        public List<SourceCitation>? Sources { get; init; }
         public int DurationMs { get; init; }
 
         public ChatMessage(string role, string content)

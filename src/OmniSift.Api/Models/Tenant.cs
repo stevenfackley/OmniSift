@@ -41,4 +41,6 @@ public sealed class Tenant
     public ICollection<DataSource> DataSources { get; set; } = [];
     public ICollection<DocumentChunk> DocumentChunks { get; set; } = [];
     public ICollection<QueryHistory> QueryHistories { get; set; } = [];
+    public ICollection<AuditLog> AuditLogs { get; set; } = [];
+    public ICollection<AppUser> Users { get; set; } = [];
 }

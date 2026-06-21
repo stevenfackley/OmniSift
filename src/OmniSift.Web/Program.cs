@@ -22,5 +22,6 @@ builder.Services.AddScoped(sp => new HttpClient
 
 // Register application services
 builder.Services.AddScoped<OmniSiftApiClient>();
+builder.Services.AddSingleton<MarkdownService>();
 
 await builder.Build().RunAsync().ConfigureAwait(false);

@@ -3,60 +3,56 @@
 <PageTitle>OmniSift — Home</PageTitle>
 
 <div class="page-header">
-    <h1>Welcome to OmniSift</h1>
+    <span class="kicker">AI Research Platform</span>
+    <h1>Every source. One answer.</h1>
+    <p class="page-sub">Analyze your documents, the live web, and the archive — through one agent that connects the dots.</p>
 </div>
 
 <div style="margin-top: 1.5rem;">
-    <div class="card">
-        <div class="card-title">🔍 AI-Powered Research Agent</div>
-        <p>
-            OmniSift is a multi-tenant AI research platform that helps you analyze documents,
-            search the web, and explore archived content — all through an intelligent agent
-            powered by Semantic Kernel.
-        </p>
-    </div>
-
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
         <div class="card">
-            <div class="card-title">📁 Upload Documents</div>
-            <p style="color: var(--text-muted); margin-bottom: 1rem;">
-                Upload PDFs, SMS exports (CSV/JSON), or HTML files. OmniSift extracts text,
-                chunks it, and generates vector embeddings for semantic search.
+            <span class="kicker">/01 — Ingest</span>
+            <div class="card-title">Upload your documents</div>
+            <p style="color: var(--text-muted); margin-bottom: 1.25rem;">
+                Drop in PDFs, Word docs, SMS exports (CSV/JSON), email, or HTML. OmniSift extracts,
+                chunks, and embeds everything for search by meaning — not just keywords.
             </p>
-            <a href="datasources" class="btn btn-outline">Manage Data Sources</a>
+            <a href="datasources" class="btn btn-outline">Manage data sources</a>
         </div>
 
         <div class="card">
-            <div class="card-title">🤖 Ask the Agent</div>
-            <p style="color: var(--text-muted); margin-bottom: 1rem;">
-                Query your documents using natural language. The agent searches your uploaded
-                data, the web, and the Wayback Machine to find answers.
+            <span class="kicker">/02 — Sift</span>
+            <div class="card-title">Ask the agent</div>
+            <p style="color: var(--text-muted); margin-bottom: 1.25rem;">
+                Query in plain language. The agent picks its own tools across your library,
+                the live web, and the Wayback Machine — no manual switching.
             </p>
-            <a href="agent" class="btn btn-primary">Start Researching</a>
+            <a href="agent" class="btn btn-primary">Start researching →</a>
         </div>
 
         <div class="card">
-            <div class="card-title">🌐 Web & Archive Search</div>
-            <p style="color: var(--text-muted); margin-bottom: 1rem;">
-                The agent can search the live web via Tavily and check the Internet Archive's
-                Wayback Machine for historical page snapshots.
+            <span class="kicker">/03 — Answer</span>
+            <div class="card-title">Web &amp; archive search</div>
+            <p style="color: var(--text-muted); margin-bottom: 1.25rem;">
+                Live web via Tavily and historical snapshots from the Internet Archive —
+                synthesized into one cited answer.
             </p>
         </div>
     </div>
 
     <div class="card" style="margin-top: 1.5rem;">
-        <div class="card-title">⚡ System Status</div>
+        <span class="kicker">System Status</span>
         @if (_checking)
         {
-            <p style="color: var(--text-muted);">Checking API health...</p>
+            <p style="color: var(--text-muted);">Checking API health…</p>
         }
         else if (_healthy)
         {
-            <div class="alert alert-success">✅ API is healthy and connected.</div>
+            <div class="alert alert-success">API is healthy and connected.</div>
         }
         else
         {
-            <div class="alert alert-error">❌ API is unreachable. Ensure the backend is running on port 5000.</div>
+            <div class="alert alert-error">API is unreachable. Ensure the backend is running on port 5000.</div>
         }
     </div>
 </div>
