@@ -4,6 +4,8 @@
 // ============================================================
 
 using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.SemanticKernel;
@@ -12,6 +14,7 @@ using OmniSift.Api.Data;
 using OmniSift.Api.Middleware;
 using OmniSift.Api.Models;
 using OmniSift.Api.Services;
+using OmniSift.Shared;
 using OmniSift.Shared.DTOs;
 
 namespace OmniSift.Api.Controllers;
@@ -181,5 +184,153 @@ public sealed class AgentController(
             Title = title,
             GeneratedAt = timestamp
         });
+    }
+
+    /// <summary>
+    /// Generate a PDF research report from a conversation with its associated citations.
+    /// </summary>
+    [HttpPost("report/pdf")]
+    public ActionResult GenerateReportPdf([FromBody] GenerateReportRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var now = DateTime.UtcNow;
+        var timestamp = now.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var title = string.IsNullOrWhiteSpace(request.Title) ? "Research Report" : request.Title;
+
+        var reportRequest = new ReportRequest
+        {
+            Title = title,
+            Timestamp = timestamp,
+            Messages = [.. request.Messages.Select(m => new ReportMessage
+            {
+                Role = m.Role,
+                Content = m.Content,
+                Citations = [.. m.Citations]
+            })]
+        };
+
+        var pdfBytes = PdfReportBuilder.Build(reportRequest, now);
+        var fileName = $"report-{now:yyyyMMddHHmmss}.pdf";
+        return File(pdfBytes, "application/pdf", fileName);
+    }
+
+    /// <summary>
+    /// Submit a research query to the AI agent and receive a Server-Sent Events stream.
+    /// Emits delta events for each token, then a final event with metadata and citations.
+    /// </summary>
+    [HttpPost("query/stream")]
+    public async Task QueryStream(
+        [FromBody] AgentQueryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+
+        logger.LogInformation(
+            "Agent stream query from tenant {TenantId}: {QueryPreview}",
+            tenantContext.TenantId,
+            request.Query.Length > 100 ? request.Query[..100] + "..." : request.Query);
+
+        Response.ContentType = "text/event-stream";
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers.Connection = "keep-alive";
+
+        var chatService = kernel.GetRequiredService<IChatCompletionService>();
+
+        var chatHistory = new ChatHistory();
+        chatHistory.AddSystemMessage(SystemPrompt);
+
+        if (request.ConversationHistory is not null)
+        {
+            foreach (var msg in request.ConversationHistory)
+            {
+                switch (msg.Role.ToLowerInvariant())
+                {
+                    case "user":
+                        chatHistory.AddUserMessage(msg.Content);
+                        break;
+                    case "assistant":
+                        chatHistory.AddAssistantMessage(msg.Content);
+                        break;
+                }
+            }
+        }
+
+        chatHistory.AddUserMessage(request.Query);
+
+        var executionSettings = new PromptExecutionSettings
+        {
+            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+        };
+
+        var fullText = new StringBuilder();
+
+        await foreach (var chunk in chatService.GetStreamingChatMessageContentsAsync(
+            chatHistory, executionSettings, kernel, cancellationToken).ConfigureAwait(false))
+        {
+            var text = chunk.Content;
+            if (string.IsNullOrEmpty(text))
+                continue;
+
+            fullText.Append(text);
+
+            var delta = new AgentStreamDeltaEvent { Type = "delta", Content = text };
+            var deltaJson = JsonSerializer.Serialize(delta, OmniSiftJsonContext.Default.AgentStreamDeltaEvent);
+            await Response.WriteAsync($"data: {deltaJson}\n\n", cancellationToken).ConfigureAwait(false);
+            await Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        sw.Stop();
+
+        var pluginsUsed = chatHistory
+            .Where(m => m.Role == AuthorRole.Tool)
+            .Select(m => m.Metadata?.GetValueOrDefault("ChatCompletionsFunctionToolCall.Name")?.ToString())
+            .Where(name => name is not null)
+            .Distinct()
+            .Cast<string>()
+            .ToList();
+
+        var responseText = fullText.ToString();
+        if (string.IsNullOrEmpty(responseText))
+            responseText = "I was unable to generate a response.";
+
+        var sources = citationAccumulator.GetCitations();
+
+        var finalEvent = new AgentStreamFinalEvent
+        {
+            Type = "final",
+            PluginsUsed = pluginsUsed,
+            DurationMs = (int)sw.ElapsedMilliseconds,
+            Sources = [.. sources]
+        };
+        var finalJson = JsonSerializer.Serialize(finalEvent, OmniSiftJsonContext.Default.AgentStreamFinalEvent);
+        await Response.WriteAsync($"data: {finalJson}\n\n", cancellationToken).ConfigureAwait(false);
+        await Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+        // Save to query history
+        var queryHistory = new QueryHistory
+        {
+            TenantId = tenantContext.TenantId,
+            QueryText = request.Query,
+            ResponseText = responseText,
+            PluginsUsed = pluginsUsed,
+            DurationMs = (int)sw.ElapsedMilliseconds
+        };
+
+        dbContext.QueryHistories.Add(queryHistory);
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        await auditLogger.LogAsync("agent_query_stream", "query_history", queryHistory.Id, cancellationToken).ConfigureAwait(false);
+
+        logger.LogInformation(
+            "Agent stream query completed in {DurationMs}ms, plugins={Plugins}",
+            sw.ElapsedMilliseconds, string.Join(", ", pluginsUsed));
     }
 }

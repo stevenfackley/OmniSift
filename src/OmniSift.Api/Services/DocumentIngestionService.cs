@@ -132,6 +132,13 @@ public sealed class DocumentIngestionService(
 
                 logger.LogDebug("Extracted {Length} chars from source {DataSourceId}", rawText.Length, dataSource.Id);
 
+                // Step 1b: PII scan (non-blocking — flag only, never reject)
+                var piiMatches = PiiScanner.Scan(rawText);
+                dataSource.HasPii = piiMatches.Count > 0;
+                dataSource.PiiFlags = piiMatches.Count > 0
+                    ? [.. piiMatches.Select(m => m.Type.ToString())]
+                    : null;
+
                 // Step 2: Chunk text
                 var chunks = chunker.ChunkText(rawText);
                 logger.LogDebug("Created {ChunkCount} chunks from source {DataSourceId}", chunks.Count, dataSource.Id);

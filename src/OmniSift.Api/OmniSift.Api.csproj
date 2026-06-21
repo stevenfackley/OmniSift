@@ -33,6 +33,9 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
 
+    <!-- PDF Generation -->
+    <PackageReference Include="QuestPDF" Version="2025.6.3" />
+
     <!-- OpenAPI / Swagger -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.1" />
 

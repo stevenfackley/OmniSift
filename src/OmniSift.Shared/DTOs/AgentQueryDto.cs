@@ -65,6 +65,26 @@ public sealed record AgentQueryResponse
 }
 
 /// <summary>
+/// SSE delta event emitted for each token chunk during streaming.
+/// </summary>
+public sealed record AgentStreamDeltaEvent
+{
+    public string Type { get; init; } = "delta";
+    public string Content { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// SSE final event emitted at the end of a streaming response, carrying metadata.
+/// </summary>
+public sealed record AgentStreamFinalEvent
+{
+    public string Type { get; init; } = "final";
+    public List<string> PluginsUsed { get; init; } = [];
+    public int DurationMs { get; init; }
+    public List<SourceCitation> Sources { get; init; } = [];
+}
+
+/// <summary>
 /// A citation to a source used in the agent's response.
 /// </summary>
 public sealed record SourceCitation

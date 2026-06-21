@@ -31,19 +31,35 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
             return;
         }
 
-        // Extract tenant ID from header
-        if (!context.Request.Headers.TryGetValue(TenantHeaderName, out var tenantHeader) ||
-            !Guid.TryParse(tenantHeader.FirstOrDefault(), out var tenantId))
+        // Extract tenant ID — prefer header; fall back to JWT claim for Bearer auth.
+        Guid tenantId;
+        if (context.Request.Headers.TryGetValue(TenantHeaderName, out var tenantHeader) &&
+            Guid.TryParse(tenantHeader.FirstOrDefault(), out tenantId))
         {
-            logger.LogWarning("Request missing or invalid {Header} header from {RemoteIp}",
-                TenantHeaderName, context.Connection.RemoteIpAddress);
-
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await context.Response.WriteAsJsonAsync(new
+            // Header path — tenant already resolved.
+        }
+        else
+        {
+            var tenantClaim = context.User.FindFirst("tenant_id")?.Value;
+            if (context.User.Identity?.IsAuthenticated == true &&
+                !string.IsNullOrEmpty(tenantClaim) &&
+                Guid.TryParse(tenantClaim, out tenantId))
             {
-                error = $"Missing or invalid '{TenantHeaderName}' header. Must be a valid GUID."
-            }).ConfigureAwait(false);
-            return;
+                // JWT path — tenant resolved from claim.
+                logger.LogDebug("Tenant context resolved from JWT claim: {TenantId}", tenantId);
+            }
+            else
+            {
+                logger.LogWarning("Request missing or invalid {Header} header from {RemoteIp}",
+                    TenantHeaderName, context.Connection.RemoteIpAddress);
+
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    error = $"Missing or invalid '{TenantHeaderName}' header. Must be a valid GUID."
+                }).ConfigureAwait(false);
+                return;
+            }
         }
 
         // Store the tenant ID in HttpContext.Items for downstream use

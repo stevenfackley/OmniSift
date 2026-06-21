@@ -22,6 +22,8 @@ public sealed record DataSourceDto
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
     public int ChunkCount { get; init; }
+    public bool HasPii { get; init; }
+    public List<string>? PiiFlags { get; init; }
 }
 
 /// <summary>

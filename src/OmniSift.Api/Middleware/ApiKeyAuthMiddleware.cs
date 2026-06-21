@@ -25,6 +25,13 @@ public sealed class ApiKeyAuthMiddleware(RequestDelegate next, ILogger<ApiKeyAut
             return;
         }
 
+        // JWT-authenticated requests bypass API-key checks — tenant is resolved from the JWT claim.
+        if (context.User.Identity?.IsAuthenticated == true)
+        {
+            await next(context).ConfigureAwait(false);
+            return;
+        }
+
         if (!context.Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKeyHeader) ||
             string.IsNullOrWhiteSpace(apiKeyHeader.FirstOrDefault()))
         {

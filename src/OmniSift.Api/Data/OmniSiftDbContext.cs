@@ -80,6 +80,9 @@ public class OmniSiftDbContext : DbContext
             entity.Property(e => e.ErrorMessage).HasColumnName("error_message");
             entity.Property(e => e.Metadata).HasColumnName("metadata").HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb")
                 .HasConversion(JsonDictionaryConverter);
+            entity.Property(e => e.HasPii).HasColumnName("has_pii").HasDefaultValue(false);
+            entity.Property(e => e.PiiFlags).HasColumnName("pii_flags").HasColumnType("jsonb")
+                .HasConversion(JsonStringListConverter);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
 
@@ -204,4 +207,11 @@ public class OmniSiftDbContext : DbContext
     private static readonly ValueConverter<Dictionary<string, object>, string> JsonDictionaryConverter = new(
         v => JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
         v => JsonSerializer.Deserialize<Dictionary<string, object>>(v, JsonSerializerOptions.Default) ?? new Dictionary<string, object>());
+
+    /// <summary>
+    /// Value converter for nullable List&lt;string&gt; JSONB columns (PII flags).
+    /// </summary>
+    private static readonly ValueConverter<List<string>?, string> JsonStringListConverter = new(
+        v => v == null ? "[]" : JsonSerializer.Serialize(v, JsonSerializerOptions.Default),
+        v => JsonSerializer.Deserialize<List<string>>(v, JsonSerializerOptions.Default));
 }
