@@ -3,7 +3,8 @@
 <PageTitle>OmniSift — Data Sources</PageTitle>
 
 <div class="page-header">
-    <h1>📁 Data Sources</h1>
+    <span class="kicker">Your Corpus</span>
+    <h1>Data Sources</h1>
 </div>
 
 <div style="margin-top: 1.5rem;">
@@ -13,10 +14,10 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
             <div>
                 <InputFile OnChange="HandleFileSelected" class="form-input"
-                           accept=".pdf,.csv,.json,.html,.htm"
+                           accept=".pdf,.csv,.json,.html,.htm,.docx,.eml,.mbox"
                            disabled="@_uploading" />
                 <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem;">
-                    Supported: PDF, CSV (SMS), JSON (SMS), HTML — Max 50 MB
+                    Supported: PDF, DOCX, CSV/JSON (SMS), HTML, Email (EML/MBOX) — Max 50 MB
                 </p>
                 @if (_selectedFile is not null)
                 {

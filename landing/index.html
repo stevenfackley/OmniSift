@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OmniSift — Every source. One answer.</title>
+    <meta name="description" content="OmniSift is an AI research agent that sifts your documents, the live web, and the Internet Archive into one cited answer. Built for genealogists, journalists, legal teams, and investigators." />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="OmniSift — Every source. One answer." />
+    <meta property="og:description" content="One research agent across your documents, the live web, and the archive. Every claim carries its source." />
+    <meta property="og:image" content="/assets/og.svg" />
+
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+
+    <!-- Fonts: Fraunces (display serif) · Hanken Grotesk (body) · IBM Plex Mono (labels) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+    <link href="/css/landing.css" rel="stylesheet" />
+</head>
+<body>
+    <!-- Atmosphere layers -->
+    <div class="grain" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="cursor" aria-hidden="true"></div>
+
+    <!-- ───────────────── Nav ───────────────── -->
+    <header class="nav" id="nav">
+        <a class="brand" href="#top" aria-label="OmniSift home">
+            <span class="brand-mark">&gt;o)</span>
+            <span class="brand-name">Omni<em>Sift</em></span>
+        </a>
+        <nav class="nav-links" aria-label="Primary">
+            <a href="#how">How it works</a>
+            <a href="#capabilities">Capabilities</a>
+            <a href="#who">Who it's for</a>
+            <a href="#pricing">Pricing</a>
+        </nav>
+        <a class="btn btn-ghost nav-cta" href="/app/">Open the app <span aria-hidden="true">→</span></a>
+    </header>
+
+    <main id="top">
+        <!-- ───────────────── Hero ───────────────── -->
+        <section class="hero" id="hero">
+            <canvas class="constellation" id="constellation" aria-hidden="true"></canvas>
+            <div class="hero-inner">
+                <p class="eyebrow reveal" data-reveal>
+                    <span class="dot"></span> AI research agent
+                </p>
+                <h1 class="hero-title">
+                    <span class="line reveal" data-reveal>Every source.</span>
+                    <span class="line line-accent reveal" data-reveal>One answer.</span>
+                </h1>
+                <p class="hero-sub reveal" data-reveal>
+                    OmniSift sifts your documents, the live web, and the Internet Archive —
+                    then connects the dots into a single answer, with a citation behind every claim.
+                </p>
+                <div class="hero-actions reveal" data-reveal>
+                    <a class="btn btn-solid magnetic" href="/app/">Start sifting <span aria-hidden="true">→</span></a>
+                    <a class="btn btn-line magnetic" href="#how">See how it works</a>
+                </div>
+                <ul class="source-tags reveal" data-reveal aria-label="Sources OmniSift searches">
+                    <li>&#9656; PDF</li>
+                    <li>&#9656; SMS</li>
+                    <li>&#9656; WEB</li>
+                    <li>&#9656; ARCHIVE</li>
+                </ul>
+            </div>
+            <a class="scroll-hint" href="#problem" aria-label="Scroll to learn more">
+                <span>scroll</span>
+                <span class="scroll-line" aria-hidden="true"></span>
+            </a>
+        </section>
+
+        <!-- ───────────────── Problem ───────────────── -->
+        <section class="problem section" id="problem">
+            <div class="section-head">
+                <span class="kicker reveal" data-reveal>01 — The problem</span>
+                <h2 class="reveal" data-reveal>Research lives in fragments.</h2>
+                <p class="lede reveal" data-reveal>
+                    A PDF here. A text-message export there. A page that 404'd last spring.
+                    The answer exists — scattered across places that don't talk to each other.
+                </p>
+            </div>
+            <div class="fragments" aria-hidden="true">
+                <article class="frag" data-frag style="--x:-8deg">
+                    <span class="frag-tag">case-file.pdf</span>
+                    <span class="frag-body">142 pages · never fully read</span>
+                </article>
+                <article class="frag" data-frag style="--x:5deg">
+                    <span class="frag-tag">messages.csv</span>
+                    <span class="frag-body">9,400 texts · who said what, when?</span>
+                </article>
+                <article class="frag" data-frag style="--x:-3deg">
+                    <span class="frag-tag">profile.html</span>
+                    <span class="frag-body">link rot · gone since March</span>
+                </article>
+                <article class="frag" data-frag style="--x:7deg">
+                    <span class="frag-tag">web search</span>
+                    <span class="frag-body">40 open tabs · no system</span>
+                </article>
+            </div>
+        </section>
+
+        <!-- ───────────────── How it works ───────────────── -->
+        <section class="how section" id="how">
+            <div class="section-head">
+                <span class="kicker reveal" data-reveal>02 — How it works</span>
+                <h2 class="reveal" data-reveal>Ingest. Sift. Answer.</h2>
+                <p class="lede reveal" data-reveal>
+                    You ask in plain language. The agent decides where to look — your library,
+                    the live web, the archive — and does it all in one pass.
+                </p>
+            </div>
+            <ol class="steps">
+                <li class="step reveal" data-reveal>
+                    <span class="step-no">01</span>
+                    <h3>Ingest</h3>
+                    <p>Drop in PDFs, message exports, or web pages. Everything is chunked, embedded, and made searchable by meaning — not just keywords.</p>
+                </li>
+                <li class="step reveal" data-reveal>
+                    <span class="step-no">02</span>
+                    <h3>Sift</h3>
+                    <p>Ask a question. The agent picks its own tools — vector search across your library, a live Tavily search, a Wayback snapshot — no manual switching.</p>
+                </li>
+                <li class="step reveal" data-reveal>
+                    <span class="step-no">03</span>
+                    <h3>Answer</h3>
+                    <p>It synthesizes one coherent answer and keeps the conversation open for follow-ups — every statement traceable to its source.</p>
+                </li>
+            </ol>
+        </section>
+
+        <!-- ───────────────── Capabilities ───────────────── -->
+        <section class="capabilities section" id="capabilities">
+            <div class="section-head">
+                <span class="kicker reveal" data-reveal>03 — Capabilities</span>
+                <h2 class="reveal" data-reveal>One agent. Every angle.</h2>
+            </div>
+            <div class="cap-grid">
+                <article class="cap reveal" data-reveal>
+                    <span class="cap-idx">/01</span>
+                    <h3>Multi-source ingestion</h3>
+                    <p>PDFs, SMS/iMessage exports, and HTML — chunked, embedded, and semantically searchable.</p>
+                </article>
+                <article class="cap reveal" data-reveal>
+                    <span class="cap-idx">/02</span>
+                    <h3>Live web search</h3>
+                    <p>The agent runs real-time searches via Tavily to fill gaps your documents can't.</p>
+                </article>
+                <article class="cap reveal" data-reveal>
+                    <span class="cap-idx">/03</span>
+                    <h3>Archive retrieval</h3>
+                    <p>Dead links aren't dead ends. Pulls Wayback Machine snapshots to recover what was lost.</p>
+                </article>
+                <article class="cap reveal" data-reveal>
+                    <span class="cap-idx">/04</span>
+                    <h3>A source for every claim</h3>
+                    <p>Each answer carries citations back to the originating document or URL. Audit-ready by default.</p>
+                </article>
+                <article class="cap reveal" data-reveal>
+                    <span class="cap-idx">/05</span>
+                    <h3>Isolated by tenant</h3>
+                    <p>Postgres row-level security enforces strict data sovereignty at the database itself.</p>
+                </article>
+                <article class="cap reveal" data-reveal>
+                    <span class="cap-idx">/06</span>
+                    <h3>Conversational follow-ups</h3>
+                    <p>Multi-turn memory means you can keep pulling the thread without re-explaining context.</p>
+                </article>
+            </div>
+        </section>
+
+        <!-- ───────────────── Who it's for ───────────────── -->
+        <section class="who section" id="who">
+            <div class="section-head">
+                <span class="kicker reveal" data-reveal>04 — Built for</span>
+                <h2 class="reveal" data-reveal>The people who connect dots for a living.</h2>
+            </div>
+            <div class="who-grid">
+                <article class="who-tile reveal" data-reveal tabindex="0">
+                    <h3>Genealogists</h3>
+                    <p>Fold records, archives, and family lore into one living timeline.</p>
+                </article>
+                <article class="who-tile reveal" data-reveal tabindex="0">
+                    <h3>Journalists</h3>
+                    <p>Cross-reference public records against private documents — fast, and cited.</p>
+                </article>
+                <article class="who-tile reveal" data-reveal tabindex="0">
+                    <h3>Legal teams</h3>
+                    <p>Synthesize a profile from thousands of pages without losing the thread.</p>
+                </article>
+                <article class="who-tile reveal" data-reveal tabindex="0">
+                    <h3>Investigators</h3>
+                    <p>Pair web reconnaissance with document analysis in a single workspace.</p>
+                </article>
+            </div>
+        </section>
+
+        <!-- ───────────────── Pricing ───────────────── -->
+        <section class="pricing section" id="pricing" aria-labelledby="pricing-heading">
+            <div class="section-head">
+                <span class="kicker reveal" data-reveal>05 — Pricing</span>
+                <h2 id="pricing-heading" class="reveal" data-reveal>Simple, transparent tiers.</h2>
+                <p class="lede reveal" data-reveal>
+                    Every plan includes full-source attribution and row-level data isolation.
+                    No per-query metering — just a flat monthly seat.
+                </p>
+            </div>
+            <div class="pricing-grid">
+                <!-- Researcher -->
+                <article class="price-card reveal" data-reveal>
+                    <header class="price-card-head">
+                        <span class="price-tier">Researcher</span>
+                        <div class="price-amount">
+                            <span class="price-currency">$</span><span class="price-num">49</span><span class="price-per">/mo</span>
+                        </div>
+                        <p class="price-sub">Individual — one seat</p>
+                    </header>
+                    <ul class="price-features" aria-label="Researcher features">
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Unlimited ingestion (PDF, SMS, HTML)</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Multi-source sifting + archive retrieval</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Cited answers with source links</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Conversational follow-ups</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> 10 GB document storage</li>
+                    </ul>
+                    <a class="btn btn-line magnetic price-cta" href="/app/">Get started <span aria-hidden="true">→</span></a>
+                </article>
+
+                <!-- Professional -->
+                <article class="price-card price-card--featured reveal" data-reveal>
+                    <div class="price-badge">Most popular</div>
+                    <header class="price-card-head">
+                        <span class="price-tier">Professional</span>
+                        <div class="price-amount">
+                            <span class="price-currency">$</span><span class="price-num">149</span><span class="price-per">/mo</span>
+                        </div>
+                        <p class="price-sub">Individual — priority access</p>
+                    </header>
+                    <ul class="price-features" aria-label="Professional features">
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Everything in Researcher</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> One-click exportable cited report</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Full audit log of every query</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Priority inference queue</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> 50 GB document storage</li>
+                    </ul>
+                    <a class="btn btn-solid magnetic price-cta" href="/app/">Get started <span aria-hidden="true">→</span></a>
+                </article>
+
+                <!-- Team -->
+                <article class="price-card reveal" data-reveal>
+                    <header class="price-card-head">
+                        <span class="price-tier">Team</span>
+                        <div class="price-amount">
+                            <span class="price-currency">$</span><span class="price-num">399</span><span class="price-per">/mo</span>
+                        </div>
+                        <p class="price-sub">Up to 10 seats</p>
+                    </header>
+                    <ul class="price-features" aria-label="Team features">
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Everything in Professional</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> Shared workspaces + collaboration</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> SSO (SAML / OIDC)</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> GDPR delete &amp; export endpoints</li>
+                        <li><span class="check" aria-hidden="true">&#9656;</span> 250 GB pooled document storage</li>
+                    </ul>
+                    <a class="btn btn-line magnetic price-cta" href="/app/">Get started <span aria-hidden="true">→</span></a>
+                </article>
+            </div>
+        </section>
+
+        <!-- ───────────────── Trust strip ───────────────── -->
+        <section class="trust section" id="trust">
+            <blockquote class="trust-quote reveal" data-reveal>
+                <p>Your data stays <em>isolated.</em> Every answer carries <em>its source.</em></p>
+                <footer>Row-level tenancy &amp; full attribution — not afterthoughts.</footer>
+            </blockquote>
+        </section>
+
+        <!-- ───────────────── Final CTA ───────────────── -->
+        <section class="final section" id="cta">
+            <div class="final-inner">
+                <span class="final-mark reveal" data-reveal>&gt;o)</span>
+                <h2 class="reveal" data-reveal>Stop hunting. Start sifting.</h2>
+                <p class="reveal" data-reveal>One workspace for every source you've got — and the ones you haven't found yet.</p>
+                <a class="btn btn-solid btn-lg magnetic reveal" data-reveal href="/app/">Open OmniSift <span aria-hidden="true">→</span></a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="foot">
+        <div class="foot-brand">
+            <span class="brand-mark">&gt;o)</span>
+            Omni<em>Sift</em>
+        </div>
+        <p class="foot-tag">Every source. One answer.</p>
+        <nav class="foot-links" aria-label="Footer">
+            <a href="/app/">Open the app</a>
+            <a href="#how">How it works</a>
+            <a href="#capabilities">Capabilities</a>
+            <a href="#pricing">Pricing</a>
+        </nav>
+    </footer>
+
+    <!-- Motion: GSAP + ScrollTrigger via CDN (deferred, no build step) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+    <script src="/js/landing.js" defer></script>
+</body>
+</html>

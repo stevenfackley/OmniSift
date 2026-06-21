@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <!-- Radial amber glow in right quadrant -->
+    <radialGradient id="amberGlow" cx="72%" cy="50%" r="38%">
+      <stop offset="0%" stop-color="#E8A23D" stop-opacity="0.13"/>
+      <stop offset="55%" stop-color="#E8A23D" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#0B0C0E" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Very faint radial glow behind headline -->
+    <radialGradient id="textGlow" cx="30%" cy="52%" r="40%">
+      <stop offset="0%" stop-color="#15171C" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#0B0C0E" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Diamond gradient -->
+    <radialGradient id="diamondFill" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#F2B65A"/>
+      <stop offset="50%" stop-color="#E8A23D"/>
+      <stop offset="100%" stop-color="#B87820"/>
+    </radialGradient>
+
+    <!-- Soft glow filter for diamond -->
+    <filter id="diamondGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Subtle glow for constellation nodes -->
+    <filter id="nodeGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── Background ── -->
+  <rect width="1200" height="630" fill="#0B0C0E"/>
+
+  <!-- Subtle surface lift (top-left region where text lives) -->
+  <rect width="1200" height="630" fill="url(#textGlow)"/>
+
+  <!-- Amber glow (right side, behind constellation) -->
+  <rect width="1200" height="630" fill="url(#amberGlow)"/>
+
+  <!-- ── Blueprint Grid ── -->
+  <!-- Vertical lines -->
+  <g stroke="rgba(236,229,214,0.05)" stroke-width="0.75">
+    <line x1="0" y1="0" x2="0" y2="630"/>
+    <line x1="60" y1="0" x2="60" y2="630"/>
+    <line x1="120" y1="0" x2="120" y2="630"/>
+    <line x1="180" y1="0" x2="180" y2="630"/>
+    <line x1="240" y1="0" x2="240" y2="630"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="360" y1="0" x2="360" y2="630"/>
+    <line x1="420" y1="0" x2="420" y2="630"/>
+    <line x1="480" y1="0" x2="480" y2="630"/>
+    <line x1="540" y1="0" x2="540" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="660" y1="0" x2="660" y2="630"/>
+    <line x1="720" y1="0" x2="720" y2="630"/>
+    <line x1="780" y1="0" x2="780" y2="630"/>
+    <line x1="840" y1="0" x2="840" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+    <line x1="960" y1="0" x2="960" y2="630"/>
+    <line x1="1020" y1="0" x2="1020" y2="630"/>
+    <line x1="1080" y1="0" x2="1080" y2="630"/>
+    <line x1="1140" y1="0" x2="1140" y2="630"/>
+    <line x1="1200" y1="0" x2="1200" y2="630"/>
+  </g>
+  <!-- Horizontal lines -->
+  <g stroke="rgba(236,229,214,0.05)" stroke-width="0.75">
+    <line x1="0" y1="0" x2="1200" y2="0"/>
+    <line x1="0" y1="60" x2="1200" y2="60"/>
+    <line x1="0" y1="120" x2="1200" y2="120"/>
+    <line x1="0" y1="180" x2="1200" y2="180"/>
+    <line x1="0" y1="240" x2="1200" y2="240"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/>
+    <line x1="0" y1="360" x2="1200" y2="360"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="480" x2="1200" y2="480"/>
+    <line x1="0" y1="540" x2="1200" y2="540"/>
+    <line x1="0" y1="600" x2="1200" y2="600"/>
+    <line x1="0" y1="630" x2="1200" y2="630"/>
+  </g>
+
+  <!-- ── Constellation motif (right side) ── -->
+  <!-- Connecting lines from satellite nodes to central diamond -->
+  <!-- Node A (upper-left of cluster) → diamond -->
+  <line x1="820" y1="200" x2="950" y2="315" stroke="#E8A23D" stroke-width="1.2" stroke-opacity="0.35"/>
+  <!-- Node B (lower-left of cluster) → diamond -->
+  <line x1="820" y1="430" x2="950" y2="315" stroke="#E8A23D" stroke-width="1.2" stroke-opacity="0.35"/>
+  <!-- Node C (far right) → diamond -->
+  <line x1="1090" y1="315" x2="950" y2="315" stroke="#E8A23D" stroke-width="1.2" stroke-opacity="0.35"/>
+  <!-- Node D (top-right) → diamond (lighter, extra depth) -->
+  <line x1="1040" y1="180" x2="950" y2="315" stroke="rgba(236,229,214,0.18)" stroke-width="0.8"/>
+
+  <!-- Satellite node A — parchment -->
+  <circle cx="820" cy="200" r="5" fill="#ECE5D6" fill-opacity="0.65" filter="url(#nodeGlow)"/>
+  <!-- Satellite node B — parchment -->
+  <circle cx="820" cy="430" r="5" fill="#ECE5D6" fill-opacity="0.65" filter="url(#nodeGlow)"/>
+  <!-- Satellite node C — amber -->
+  <circle cx="1090" cy="315" r="6" fill="#E8A23D" fill-opacity="0.75" filter="url(#nodeGlow)"/>
+  <!-- Satellite node D — muted -->
+  <circle cx="1040" cy="180" r="3.5" fill="#9A958A" fill-opacity="0.55"/>
+
+  <!-- Central diamond node -->
+  <polygon
+    points="950,270 994,315 950,360 906,315"
+    fill="url(#diamondFill)"
+    filter="url(#diamondGlow)"
+  />
+  <!-- Diamond inner edge highlight -->
+  <polygon
+    points="950,282 982,315 950,348 918,315"
+    fill="none"
+    stroke="#F2B65A"
+    stroke-width="1"
+    stroke-opacity="0.35"
+  />
+
+  <!-- ── Top-left brand label ── -->
+  <text
+    x="72"
+    y="92"
+    font-family="'Courier New', Courier, 'Lucida Console', monospace"
+    font-size="17"
+    font-weight="400"
+    letter-spacing="2.5"
+    fill="#ECE5D6"
+    fill-opacity="0.80"
+  >&gt;o)&#160;&#160;OMNISIFT</text>
+
+  <!-- Hairline rule under label -->
+  <line x1="72" y1="106" x2="340" y2="106" stroke="rgba(236,229,214,0.14)" stroke-width="0.75"/>
+
+  <!-- ── Main headline ── -->
+  <!-- Line 1: "Every source." — parchment -->
+  <text
+    x="72"
+    y="296"
+    font-family="Georgia, 'Times New Roman', Times, serif"
+    font-size="86"
+    font-weight="400"
+    letter-spacing="-1"
+    fill="#ECE5D6"
+    fill-opacity="0.96"
+  >Every source.</text>
+
+  <!-- Line 2: "One answer." — amber accent -->
+  <text
+    x="72"
+    y="400"
+    font-family="Georgia, 'Times New Roman', Times, serif"
+    font-size="86"
+    font-weight="400"
+    font-style="italic"
+    letter-spacing="-1"
+    fill="#E8A23D"
+  >One answer.</text>
+
+  <!-- ── Bottom caption ── -->
+  <text
+    x="72"
+    y="568"
+    font-family="'Courier New', Courier, 'Lucida Console', monospace"
+    font-size="13"
+    font-weight="400"
+    letter-spacing="3"
+    fill="#9A958A"
+    fill-opacity="0.70"
+  >AI RESEARCH AGENT&#160;&#160;·&#160;&#160;PDF&#160;&#160;·&#160;&#160;WEB&#160;&#160;·&#160;&#160;ARCHIVE</text>
+
+  <!-- Bottom hairline -->
+  <line x1="72" y1="580" x2="560" y2="580" stroke="rgba(236,229,214,0.08)" stroke-width="0.75"/>
+</svg>

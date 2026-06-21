@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1E2028"/>
+      <stop offset="100%" stop-color="#0B0C0E"/>
+    </radialGradient>
+    <radialGradient id="diamondGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F2B65A" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#E8A23D" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#C4801F" stop-opacity="0.6"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="0.8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Dark rounded-square background -->
+  <rect x="0" y="0" width="32" height="32" rx="6" ry="6" fill="url(#bgGrad)"/>
+
+  <!-- Subtle border -->
+  <rect x="0.5" y="0.5" width="31" height="31" rx="5.5" ry="5.5" fill="none" stroke="rgba(236,229,214,0.10)" stroke-width="0.75"/>
+
+  <!-- Constellation lines — thin, faint -->
+  <!-- Line: top-left node to center diamond -->
+  <line x1="9" y1="10" x2="16" y2="16" stroke="#E8A23D" stroke-width="0.6" stroke-opacity="0.45"/>
+  <!-- Line: bottom-left node to center diamond -->
+  <line x1="9" y1="22" x2="16" y2="16" stroke="#E8A23D" stroke-width="0.6" stroke-opacity="0.45"/>
+  <!-- Line: right node to center diamond -->
+  <line x1="24" y1="16" x2="16" y2="16" stroke="#E8A23D" stroke-width="0.6" stroke-opacity="0.45"/>
+
+  <!-- Small satellite nodes -->
+  <circle cx="9" cy="10" r="1.4" fill="#ECE5D6" fill-opacity="0.55"/>
+  <circle cx="9" cy="22" r="1.4" fill="#ECE5D6" fill-opacity="0.55"/>
+  <circle cx="24" cy="16" r="1.4" fill="#ECE5D6" fill-opacity="0.55"/>
+
+  <!-- Central amber diamond (◆) -->
+  <polygon
+    points="16,9.5 20.5,16 16,22.5 11.5,16"
+    fill="url(#diamondGlow)"
+    filter="url(#glow)"
+  />
+  <!-- Diamond inner highlight -->
+  <polygon
+    points="16,11.5 19,16 16,20.5 13,16"
+    fill="none"
+    stroke="#F2B65A"
+    stroke-width="0.5"
+    stroke-opacity="0.4"
+  />
+</svg>
