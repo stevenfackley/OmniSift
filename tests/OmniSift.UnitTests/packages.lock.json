@@ -934,6 +934,11 @@
           "System.Threading.RateLimiting": "8.0.0"
         }
       },
+      "QuestPDF": {
+        "type": "Transitive",
+        "resolved": "2025.7.0",
+        "contentHash": "yRjdm7p300eEuy4Mi9YdMuecl2cvTU/CV+IHHDzw22Uf43/0C2zeG4c+MthZqkpQNJPg0Agha1iBSmLBxX1vHA=="
+      },
       "Serilog": {
         "type": "Transitive",
         "resolved": "4.3.0",
@@ -1175,6 +1180,7 @@
           "PdfPig": "[0.1.14, )",
           "Pgvector": "[0.3.2, )",
           "Pgvector.EntityFrameworkCore": "[0.3.0, )",
+          "QuestPDF": "[2025.6.3, )",
           "Serilog.AspNetCore": "[10.0.0, )",
           "Serilog.Enrichers.CorrelationId": "[3.0.1, )",
           "Serilog.Sinks.Console": "[6.1.1, )",

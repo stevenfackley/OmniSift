@@ -23,6 +23,12 @@ public sealed class AuthController(
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
+        var emailExists = await dbContext.Users
+            .AnyAsync(u => u.Email == request.Email, cancellationToken)
+            .ConfigureAwait(false);
+        if (emailExists)
+            return Conflict(new { error = "An account with this email address already exists." });
+
         var slug = Slugify(request.TenantName) + "-" + Guid.NewGuid().ToString("N")[..8];
 
         var tenant = new Tenant

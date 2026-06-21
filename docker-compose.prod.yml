@@ -3,21 +3,53 @@ version: "3.9"
 # Production overlay — apply with:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# Sensitive values are supplied via Docker file-based secrets.
-# Populate ./secrets/*.txt before deploying (see secrets/README.md).
-# The API reads secrets from /run/secrets/ via AddKeyPerFile in Program.cs.
+# What this overlay does on top of the base (docker-compose.yml):
+#   - Pulls pre-built GHCR images instead of building locally
+#   - Switches env_file to .env.prod
+#   - Injects secrets via Docker file-based secrets (see secrets/ directory)
+#   - Removes host-port exposure on db (internal-only in prod)
+#   - Adds healthchecks on api and web
+#   - Enforces restart: always on every service
+#
+# Required files on the host before first deploy:
+#   .env.prod               — non-secret overrides (ASPNETCORE_ENVIRONMENT, etc.)
+#   secrets/*.txt           — one file per secret, raw value, no trailing newline
+#     postgres_password.txt
+#     Anthropic__ApiKey.txt
+#     OpenAI__ApiKey.txt
+#     Tavily__ApiKey.txt
+#     Jwt__Secret.txt
+#     ConnectionStrings__DefaultConnection.txt
+#
+# GHCR image names (pushed by .github/workflows/deploy.yml):
+#   ghcr.io/<owner>/omnisift-web:<tag>
+#   ghcr.io/<owner>/omnisift-api:<tag>
+# The deploy workflow uses the 'latest' tag by default.
 
 services:
   db:
+    image: pgvector/pgvector:pg16
+    restart: always
     env_file: .env.prod
     secrets:
       - postgres_password
     environment:
       # POSTGRES_PASSWORD_FILE is natively supported by the postgres image.
-      # It overrides POSTGRES_PASSWORD, keeping the password out of env vars.
+      # It overrides POSTGRES_PASSWORD, keeping the plaintext out of env vars.
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    ports: []         # no host exposure in prod — db is internal-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-omnisift} -d ${POSTGRES_DB:-omnisift}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   api:
+    # Pull the pre-built image from GHCR; tag is overridable via IMAGE_API_TAG env var
+    image: ${IMAGE_API:-ghcr.io/stevenfackley/omnisift-api}:${IMAGE_TAG:-latest}
+    build: null         # disable local build in prod
+    restart: always
     env_file: .env.prod
     secrets:
       - Anthropic__ApiKey
@@ -28,21 +60,35 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      # Clear the dev mappings — sensitive values now come from Docker secrets
-      # which AddKeyPerFile reads and applies with higher priority than env vars.
+      # Clear dev env-var secrets — the API reads /run/secrets/ via AddKeyPerFile
       Anthropic__ApiKey: ""
       OpenAI__ApiKey: ""
       Tavily__ApiKey: ""
       Jwt__Secret: ""
       ConnectionStrings__DefaultConnection: ""
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   web:
+    # Pull the pre-built image from GHCR
+    image: ${IMAGE_WEB:-ghcr.io/stevenfackley/omnisift-web}:${IMAGE_TAG:-latest}
+    build: null         # disable local build in prod
+    restart: always
     env_file: .env.prod
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/app/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
 # Docker file-based secrets.
-# Each secret is a plain-text file containing only the secret value.
-# In a CI/CD pipeline, write these files from your secrets manager
-# (Vault, AWS Secrets Manager, Azure Key Vault, etc.) at deploy time.
+# Each file must contain only the raw secret value (no trailing newline).
+# In CI/CD, write these files from your secrets manager at deploy time.
 secrets:
   postgres_password:
     file: ./secrets/postgres_password.txt

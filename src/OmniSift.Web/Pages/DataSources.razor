@@ -116,6 +116,14 @@
                             </td>
                             <td>
                                 <span class="badge badge-@source.Status">@source.Status</span>
+                                @if (source.HasPii)
+                                {
+                                    var tooltip = source.PiiFlags is { Count: > 0 }
+                                        ? string.Join(", ", source.PiiFlags)
+                                        : "PII detected";
+                                    <span class="badge badge-pending" style="margin-left: 0.4rem; cursor: default;"
+                                          title="@tooltip">PII</span>
+                                }
                                 @if (!string.IsNullOrWhiteSpace(source.ErrorMessage))
                                 {
                                     <span style="font-size: 0.75rem; color: var(--danger); display: block;">

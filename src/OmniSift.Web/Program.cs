@@ -12,7 +12,6 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Configure the API base address
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5000";
 
 builder.Services.AddScoped(sp => new HttpClient
@@ -20,7 +19,7 @@ builder.Services.AddScoped(sp => new HttpClient
     BaseAddress = new Uri(apiBaseUrl)
 });
 
-// Register application services
+builder.Services.AddScoped<AuthStateService>();
 builder.Services.AddScoped<OmniSiftApiClient>();
 builder.Services.AddSingleton<MarkdownService>();
 

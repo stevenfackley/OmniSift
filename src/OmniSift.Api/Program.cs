@@ -19,6 +19,7 @@ using OmniSift.Shared;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using QuestPDF.Infrastructure;
 using Serilog;
 using Serilog.Events;
 
@@ -33,6 +34,8 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
+
+    QuestPDF.Settings.License = LicenseType.Community;
 
     var builder = WebApplication.CreateBuilder(args);
 
@@ -189,6 +192,7 @@ try
     builder.Services.AddKeyedScoped<ITextExtractor, EmailTextExtractor>("email");
 
     builder.Services.AddScoped<IDocumentIngestionService, DocumentIngestionService>();
+    builder.Services.AddScoped<IEntityExtractionService, EntityExtractionService>();
 
     // Async ingestion pipeline via System.Threading.Channels.
     // IngestionChannel is the shared queue (singleton).

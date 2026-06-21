@@ -1,0 +1,147 @@
+name: deploy
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Required GitHub secrets (Settings → Secrets and variables → Actions):
+#
+#   DEPLOY_HOST        — SSH hostname or IP of the production server
+#   DEPLOY_USER        — SSH username (must be in the docker group)
+#   DEPLOY_SSH_KEY     — PEM-encoded SSH private key (passphrase-free)
+#   DEPLOY_WORK_DIR    — Absolute path on host where docker-compose files live
+#                        e.g. /srv/omnisift
+#
+# These four secrets are ONLY needed for the `deploy` job (SSH step).
+# The `build-push` job works without them — it uses only GITHUB_TOKEN.
+#
+# On the server, the following must be present before first deploy:
+#   $DEPLOY_WORK_DIR/docker-compose.yml
+#   $DEPLOY_WORK_DIR/docker-compose.prod.yml
+#   $DEPLOY_WORK_DIR/.env.prod
+#   $DEPLOY_WORK_DIR/secrets/*.txt    (populated from your secrets manager)
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: false
+        default: "production"
+        type: choice
+        options: [production]
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a running deploy
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_WEB: ghcr.io/${{ github.repository_owner }}/omnisift-web
+  IMAGE_API: ghcr.io/${{ github.repository_owner }}/omnisift-api
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 1: Build and push both images to GHCR.
+  # No live target needed — runs purely on GitHub-hosted runners.
+  # ────────────────────────────────────────────────────────────────────────────
+  build-push:
+    name: Build & push images
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write   # required to push to ghcr.io
+
+    outputs:
+      sha-tag: ${{ steps.meta.outputs.sha-tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Emit the short SHA once; reuse in both image tags and the deploy job.
+      - name: Compute tags
+        id: meta
+        run: |
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "sha-tag=prod-${SHA}" >> "$GITHUB_OUTPUT"
+
+      # ── Web image ──────────────────────────────────────────────────────────
+      - name: Build and push web
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: src/OmniSift.Web/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_WEB }}:latest
+            ${{ env.IMAGE_WEB }}:${{ steps.meta.outputs.sha-tag }}
+          cache-from: type=gha,scope=web
+          cache-to:   type=gha,scope=web,mode=max
+
+      # ── API image ──────────────────────────────────────────────────────────
+      - name: Build and push api
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: src/OmniSift.Api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_API }}:latest
+            ${{ env.IMAGE_API }}:${{ steps.meta.outputs.sha-tag }}
+          cache-from: type=gha,scope=api
+          cache-to:   type=gha,scope=api,mode=max
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 2: SSH to production server and restart the stack.
+  #
+  # This job no-ops gracefully when DEPLOY_HOST is not set, so the workflow
+  # can be merged and the build-push job exercised before infra is provisioned.
+  # ────────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    needs: build-push
+    if: ${{ secrets.DEPLOY_HOST != '' }}   # skip entirely when infra not ready
+
+    environment:
+      name: production
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_WORK_DIR }}"
+
+            # Pull the new images (tagged latest AND the immutable SHA tag)
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml \
+              pull web api
+
+            # Restart only web and api (db has its own data volume — don't touch it)
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml \
+              up -d --no-deps --remove-orphans web api
+
+            # Smoke-check: give the API 30 s to become healthy
+            sleep 30
+            docker compose ps
+            echo "Deploy of ${{ needs.build-push.outputs.sha-tag }} complete."

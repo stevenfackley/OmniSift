@@ -48,6 +48,12 @@ public sealed class DataSource
     /// </summary>
     public Dictionary<string, object> Metadata { get; set; } = [];
 
+    /// <summary>PII types detected during ingestion. Null = not yet scanned.</summary>
+    public List<string>? PiiFlags { get; set; }
+
+    /// <summary>True if any PII was detected.</summary>
+    public bool HasPii { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

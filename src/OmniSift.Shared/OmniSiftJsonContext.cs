@@ -15,6 +15,8 @@ namespace OmniSift.Shared;
 /// </summary>
 [JsonSerializable(typeof(AgentQueryRequest))]
 [JsonSerializable(typeof(AgentQueryResponse))]
+[JsonSerializable(typeof(AgentStreamDeltaEvent))]
+[JsonSerializable(typeof(AgentStreamFinalEvent))]
 [JsonSerializable(typeof(ConversationMessage))]
 [JsonSerializable(typeof(SourceCitation))]
 [JsonSerializable(typeof(DataSourceDto))]
@@ -36,6 +38,13 @@ namespace OmniSift.Shared;
 [JsonSerializable(typeof(RegisterRequest))]
 [JsonSerializable(typeof(LoginRequest))]
 [JsonSerializable(typeof(AuthResponse))]
+[JsonSerializable(typeof(EntityNode))]
+[JsonSerializable(typeof(EntityEdge))]
+[JsonSerializable(typeof(TimelineEntry))]
+[JsonSerializable(typeof(EntityGraphResponse))]
+[JsonSerializable(typeof(List<EntityNode>))]
+[JsonSerializable(typeof(List<EntityEdge>))]
+[JsonSerializable(typeof(List<TimelineEntry>))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
