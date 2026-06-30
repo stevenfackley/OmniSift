@@ -1,8 +1,9 @@
 // ============================================================
 // Unit Tests — TenantMiddleware
-// Verifies tenant header validation and context setting
+// Verifies tenant is derived from the authenticated claim, not a header
 // ============================================================
 
+using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -17,10 +18,10 @@ public sealed class TenantMiddlewareTests
     public async Task InvokeAsync_HealthCheckPath_SkipsTenantResolution()
     {
         var nextCalled = false;
-        var middleware = CreateMiddleware(ctx => { nextCalled = true; return Task.CompletedTask; });
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
         var context = CreateContext("/api/health");
 
-        // Note: InvokeAsync requires OmniSiftDbContext, but health path skips before using it
+        // Health path skips before the DbContext is used.
         await middleware.InvokeAsync(context, null!);
 
         nextCalled.Should().BeTrue();
@@ -30,7 +31,7 @@ public sealed class TenantMiddlewareTests
     public async Task InvokeAsync_SwaggerPath_SkipsTenantResolution()
     {
         var nextCalled = false;
-        var middleware = CreateMiddleware(ctx => { nextCalled = true; return Task.CompletedTask; });
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
         var context = CreateContext("/swagger/index.html");
 
         await middleware.InvokeAsync(context, null!);
@@ -39,32 +40,40 @@ public sealed class TenantMiddlewareTests
     }
 
     [Fact]
-    public async Task InvokeAsync_MissingTenantHeader_Returns400()
+    public async Task InvokeAsync_UnauthenticatedRequest_CallsNextWithoutTenantContext()
     {
-        var middleware = CreateMiddleware(_ => Task.CompletedTask);
+        // [Authorize] is responsible for the 401 on protected endpoints; the
+        // middleware must not itself reject — it just continues without a tenant.
+        var nextCalled = false;
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
         var context = CreateContext("/api/datasources");
 
         await middleware.InvokeAsync(context, null!);
 
-        context.Response.StatusCode.Should().Be(400);
+        nextCalled.Should().BeTrue();
+        context.Items.Should().NotContainKey("TenantId");
     }
 
     [Fact]
-    public async Task InvokeAsync_InvalidGuidHeader_Returns400()
+    public async Task InvokeAsync_AuthenticatedWithoutTenantClaim_Returns403()
     {
-        var middleware = CreateMiddleware(_ => Task.CompletedTask);
+        var nextCalled = false;
+        var middleware = CreateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
         var context = CreateContext("/api/datasources");
-        context.Request.Headers[TenantMiddleware.TenantHeaderName] = "not-a-guid";
+        context.User = Authenticated(new Claim("sub", Guid.NewGuid().ToString()));
 
         await middleware.InvokeAsync(context, null!);
 
-        context.Response.StatusCode.Should().Be(400);
+        nextCalled.Should().BeFalse();
+        context.Response.StatusCode.Should().Be(403);
     }
 
-    private static TenantMiddleware CreateMiddleware(RequestDelegate next)
-    {
-        return new TenantMiddleware(next, Mock.Of<ILogger<TenantMiddleware>>());
-    }
+    // NOTE: the authenticated happy path (tenant_id claim → RLS set + next) requires
+    // a DbContext and is exercised end-to-end by the integration tests
+    // (AuthenticationTests / DataSourcesEndpointTests) against the real pipeline.
+
+    private static TenantMiddleware CreateMiddleware(RequestDelegate next) =>
+        new(next, Mock.Of<ILogger<TenantMiddleware>>());
 
     private static DefaultHttpContext CreateContext(string path)
     {
@@ -73,4 +82,7 @@ public sealed class TenantMiddlewareTests
         context.Response.Body = new MemoryStream();
         return context;
     }
+
+    private static ClaimsPrincipal Authenticated(params Claim[] claims) =>
+        new(new ClaimsIdentity(claims, authenticationType: "TestAuth"));
 }

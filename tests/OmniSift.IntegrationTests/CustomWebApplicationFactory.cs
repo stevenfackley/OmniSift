@@ -3,14 +3,18 @@
 // Configures in-memory database and mocked services for testing
 // ============================================================
 
-using System.Security.Cryptography;
+using System.IdentityModel.Tokens.Jwt;
+using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.SemanticKernel;
 using Moq;
 using OmniSift.Api.Data;
@@ -23,6 +27,11 @@ namespace OmniSift.IntegrationTests;
 /// <summary>
 /// Custom WebApplicationFactory that replaces PostgreSQL with an in-memory
 /// database and mocks external services (embedding, LLM).
+///
+/// Authentication: the Testing environment leaves Supabase:Url unset, so the API
+/// validates the legacy in-house HS256 tokens. Tests mint those tokens via
+/// <see cref="CreateToken"/> (matching the configured Jwt:Secret) and attach them
+/// as Bearer — production validates Supabase ES256 via OIDC instead.
 /// </summary>
 public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
@@ -30,11 +39,27 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     /// Dev tenant ID used in tests (matches db/init.sql seed).
     /// </summary>
     public static readonly Guid TestTenantId = Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
-    public const string TestApiKey = "omnisift-test-key";
+
+    // HS256 signing parameters injected into the Testing host's configuration and
+    // used to mint matching tokens. Must agree with the validator in Program.cs.
+    public const string TestJwtSecret = "omnisift-integration-tests-hs256-signing-secret-key";
+    public const string TestJwtIssuer = "OmniSift";
+    public const string TestJwtAudience = "OmniSift";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:Secret"] = TestJwtSecret,
+                ["Jwt:Issuer"] = TestJwtIssuer,
+                ["Jwt:Audience"] = TestJwtAudience,
+                // Supabase:Url intentionally unset → in-house HS256 validation path.
+            });
+        });
 
         builder.ConfigureServices(services =>
         {
@@ -114,7 +139,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 Id = TestTenantId,
                 Name = "Test Tenant",
                 Slug = "test",
-                ApiKeyHash = HashApiKey(TestApiKey),
+                ApiKeyHash = "test-tenant-api-key-hash",
                 IsActive = true
             });
             db.SaveChanges();
@@ -124,20 +149,40 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
-    /// Creates an HttpClient pre-configured with the test tenant header.
+    /// Mints an HS256 bearer token carrying the <c>tenant_id</c> + <c>sub</c> claims
+    /// the API derives identity from. Signed with <see cref="TestJwtSecret"/>.
     /// </summary>
-    public HttpClient CreateTenantClient()
+    public string CreateToken(Guid? tenantId = null, Guid? userId = null)
     {
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", TestTenantId.ToString());
-        client.DefaultRequestHeaders.Add("X-API-Key", TestApiKey);
-        return client;
+        var creds = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret)),
+            SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(
+            issuer: TestJwtIssuer,
+            audience: TestJwtAudience,
+            claims:
+            [
+                new Claim("sub", (userId ?? Guid.NewGuid()).ToString()),
+                new Claim("tenant_id", (tenantId ?? TestTenantId).ToString()),
+                new Claim("role", "authenticated"),
+            ],
+            expires: DateTime.UtcNow.AddHours(1),
+            signingCredentials: creds);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private static string HashApiKey(string rawKey)
+    /// <summary>
+    /// Creates an HttpClient authenticated as the given tenant (defaults to the
+    /// seeded test tenant) via a Bearer token.
+    /// </summary>
+    public HttpClient CreateTenantClient(Guid? tenantId = null)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(rawKey));
-        return Convert.ToHexStringLower(bytes);
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", CreateToken(tenantId));
+        return client;
     }
 
     /// <summary>

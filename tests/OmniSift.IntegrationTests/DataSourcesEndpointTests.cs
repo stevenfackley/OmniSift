@@ -1,6 +1,6 @@
 // ============================================================
 // Integration Tests — DataSources Endpoints
-// Verifies upload, list, get, delete, and tenant isolation
+// Verifies upload, list, get, delete with bearer authentication
 // ============================================================
 
 using System.Net;
@@ -22,7 +22,7 @@ public sealed class DataSourcesEndpointTests : IClassFixture<CustomWebApplicatio
     }
 
     [Fact]
-    public async Task ListDataSources_WithTenantHeader_Returns200()
+    public async Task ListDataSources_Authenticated_Returns200()
     {
         var response = await _client.GetAsync("/api/datasources");
 
@@ -30,9 +30,9 @@ public sealed class DataSourcesEndpointTests : IClassFixture<CustomWebApplicatio
     }
 
     [Fact]
-    public async Task ListDataSources_WithoutTenantHeader_Returns401()
+    public async Task ListDataSources_WithoutToken_Returns401()
     {
-        var client = _factory.CreateClient(); // No tenant header
+        var client = _factory.CreateClient(); // No bearer token
         var response = await client.GetAsync("/api/datasources");
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -70,19 +70,6 @@ public sealed class DataSourcesEndpointTests : IClassFixture<CustomWebApplicatio
         var response = await _client.PostAsync("/api/datasources/upload", content);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task TenantIsolation_DifferentTenant_CannotSeeOtherData()
-    {
-        // Create client with a different (non-existent) tenant
-        var otherClient = _factory.CreateClient();
-        otherClient.DefaultRequestHeaders.Add("X-Tenant-Id", Guid.NewGuid().ToString());
-        otherClient.DefaultRequestHeaders.Add("X-API-Key", CustomWebApplicationFactory.TestApiKey);
-
-        var response = await otherClient.GetAsync("/api/datasources");
-
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
