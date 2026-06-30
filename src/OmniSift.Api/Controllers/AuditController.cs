@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OmniSift.Api.Data;
@@ -7,6 +8,7 @@ using OmniSift.Shared.DTOs;
 namespace OmniSift.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public sealed class AuditController(
     OmniSiftDbContext dbContext,

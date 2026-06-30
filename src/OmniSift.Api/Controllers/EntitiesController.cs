@@ -4,6 +4,7 @@
 // ============================================================
 
 using System.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using OmniSift.Api.Middleware;
@@ -13,6 +14,7 @@ using OmniSift.Shared.DTOs;
 namespace OmniSift.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 [EnableRateLimiting("per-tenant")]
 public sealed class EntitiesController(

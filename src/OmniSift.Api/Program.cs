@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.SemanticKernel;
 using OmniSift.Api.Data;
+using OmniSift.Api.Extensions;
 using OmniSift.Api.Infrastructure;
 using OmniSift.Api.Middleware;
 using OmniSift.Api.Options;
@@ -296,21 +297,60 @@ try
     });
 
     // ── JWT Auth ────────────────────────────────────────────────
+    // Production: validate Supabase-issued ES256/RS256 access tokens via OIDC
+    // discovery (JWKS) — NO symmetric secret. Enabled by setting Supabase:Url.
+    // The Supabase project must emit a custom `tenant_id` claim (app_metadata /
+    // access-token hook); tenant identity is read from that claim, never a header.
+    //
+    // Development fallback: when Supabase:Url is empty, the legacy in-house HS256
+    // tokens issued by AuthController (Jwt:Secret) are validated instead.
     builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
+    builder.Services.Configure<SupabaseOptions>(builder.Configuration.GetSection(SupabaseOptions.Section));
+
+    var supabaseUrl = builder.Configuration[$"{SupabaseOptions.Section}:Url"];
+    var useSupabaseAuth = !string.IsNullOrWhiteSpace(supabaseUrl);
+
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
         {
-            var jwtOpts = builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
-            options.TokenValidationParameters = new TokenValidationParameters
+            // Preserve raw JWT claim names ("sub", "tenant_id") instead of
+            // remapping them to legacy SOAP URIs — downstream reads them directly.
+            options.MapInboundClaims = false;
+
+            if (useSupabaseAuth)
             {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ValidIssuer = jwtOpts.Issuer,
-                ValidAudience = jwtOpts.Audience,
-                IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtOpts.Secret))
-            };
+                var supabaseOpts = builder.Configuration.GetSection(SupabaseOptions.Section).Get<SupabaseOptions>() ?? new SupabaseOptions();
+                var supabaseAuthBase = supabaseUrl!.TrimEnd('/') + "/auth/v1";
+
+                // MetadataAddress makes JwtBearer build its own ConfigurationManager,
+                // fetch the JWKS, match the ES256 key by `kid`, refresh on rotation,
+                // and supply ValidIssuer from the discovery document — no custom keys.
+                options.MetadataAddress = $"{supabaseAuthBase}/.well-known/openid-configuration";
+                options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidAudience = supabaseOpts.Audience,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true
+                };
+            }
+            else
+            {
+                // Legacy / development: in-house HS256 self-issued tokens.
+                var jwtOpts = builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = jwtOpts.Issuer,
+                    ValidAudience = jwtOpts.Audience,
+                    IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtOpts.Secret))
+                };
+            }
         });
     builder.Services.AddAuthorization();
 
@@ -324,7 +364,8 @@ try
     {
         options.AddPolicy("per-tenant", ctx =>
             RateLimitPartition.GetTokenBucketLimiter(
-                partitionKey: ctx.Request.Headers["X-Tenant-Id"].ToString(),
+                // Partition by the authenticated tenant claim, never a client header.
+                partitionKey: ctx.User.TryGetTenantId()?.ToString() ?? "anonymous",
                 factory: _ => new TokenBucketRateLimiterOptions
                 {
                     TokenLimit = 20,
@@ -391,10 +432,10 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
 
-    // API key authentication (must run before tenant resolution)
-    app.UseApiKeyAuth();
-
-    // Tenant resolution middleware (sets RLS session variable)
+    // Tenant resolution middleware — derives the tenant from the validated JWT
+    // (tenant_id claim) and sets the RLS session variable. Runs after auth so the
+    // ClaimsPrincipal is populated. The legacy X-Tenant-Id/X-API-Key header path
+    // was removed: it allowed tenant spoofing.
     app.UseTenantMiddleware();
 
     app.MapControllers();

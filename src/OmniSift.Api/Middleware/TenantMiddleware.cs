@@ -1,29 +1,29 @@
 // ============================================================
 // OmniSift.Api — Tenant Resolution Middleware
-// Extracts tenant ID from request headers and sets
-// the PostgreSQL session variable for RLS enforcement.
+// Derives the tenant from the authenticated JWT (tenant_id claim)
+// and sets the PostgreSQL session variable for RLS enforcement.
 // ============================================================
 
 using Microsoft.EntityFrameworkCore;
 using OmniSift.Api.Data;
+using OmniSift.Api.Extensions;
 
 namespace OmniSift.Api.Middleware;
 
 /// <summary>
-/// Middleware that resolves the current tenant from the X-Tenant-Id header,
-/// validates the tenant exists and is active, and sets the PostgreSQL
-/// session variable 'app.current_tenant' for Row-Level Security enforcement.
+/// Resolves the current tenant from the validated JWT's <c>tenant_id</c> claim,
+/// stores it in <see cref="HttpContext.Items"/> for downstream use, and sets the
+/// PostgreSQL session variable <c>app.current_tenant</c> for Row-Level Security.
+///
+/// The tenant is taken ONLY from the authenticated identity — the previous
+/// <c>X-Tenant-Id</c> request header is no longer trusted, closing the
+/// tenant-spoofing hole where any caller could select an arbitrary tenant.
 /// </summary>
 public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> logger)
 {
-    /// <summary>
-    /// Header name used to identify the current tenant.
-    /// </summary>
-    public const string TenantHeaderName = "X-Tenant-Id";
-
     public async Task InvokeAsync(HttpContext context, OmniSiftDbContext dbContext)
     {
-        // Skip tenant resolution for health checks and Swagger
+        // Skip tenant resolution for anonymous endpoints (health, Swagger, auth).
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
         if (path.StartsWith("/health") || path.StartsWith("/api/health") || path.StartsWith("/swagger") || path.StartsWith("/api/auth"))
         {
@@ -31,43 +31,34 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
             return;
         }
 
-        // Extract tenant ID — prefer header; fall back to JWT claim for Bearer auth.
-        Guid tenantId;
-        if (context.Request.Headers.TryGetValue(TenantHeaderName, out var tenantHeader) &&
-            Guid.TryParse(tenantHeader.FirstOrDefault(), out tenantId))
+        // Unauthenticated requests to protected endpoints are already rejected by
+        // the [Authorize] authorization middleware before reaching here. If an
+        // anonymous endpoint flows through, just continue without a tenant context.
+        if (context.User.Identity?.IsAuthenticated != true)
         {
-            // Header path — tenant already resolved.
-        }
-        else
-        {
-            var tenantClaim = context.User.FindFirst("tenant_id")?.Value;
-            if (context.User.Identity?.IsAuthenticated == true &&
-                !string.IsNullOrEmpty(tenantClaim) &&
-                Guid.TryParse(tenantClaim, out tenantId))
-            {
-                // JWT path — tenant resolved from claim.
-                logger.LogDebug("Tenant context resolved from JWT claim: {TenantId}", tenantId);
-            }
-            else
-            {
-                logger.LogWarning("Request missing or invalid {Header} header from {RemoteIp}",
-                    TenantHeaderName, context.Connection.RemoteIpAddress);
-
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                await context.Response.WriteAsJsonAsync(new
-                {
-                    error = $"Missing or invalid '{TenantHeaderName}' header. Must be a valid GUID."
-                }).ConfigureAwait(false);
-                return;
-            }
+            await next(context).ConfigureAwait(false);
+            return;
         }
 
-        // Store the tenant ID in HttpContext.Items for downstream use
-        context.Items["TenantId"] = tenantId;
+        // Tenant identity comes exclusively from the validated token.
+        var tenantId = context.User.TryGetTenantId();
+        if (tenantId is null)
+        {
+            logger.LogWarning("Authenticated request to {Path} has no valid tenant_id claim", context.Request.Path);
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = "Token does not carry a valid tenant_id claim."
+            }).ConfigureAwait(false);
+            return;
+        }
 
-        // Set the PostgreSQL session variable for RLS enforcement.
-        // This ensures all queries through this connection are scoped to the tenant.
-        // Skip for non-relational providers (e.g., InMemory during testing).
+        // Store the tenant ID in HttpContext.Items for downstream use.
+        context.Items["TenantId"] = tenantId.Value;
+
+        // Set the PostgreSQL session variable for RLS enforcement so every query
+        // on this connection is scoped to the tenant. Skipped for non-relational
+        // providers (e.g. InMemory during testing).
         if (!dbContext.Database.IsRelational())
         {
             await next(context).ConfigureAwait(false);
@@ -85,20 +76,20 @@ public sealed class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddlew
 #pragma warning disable CA2007 // await using DisposeAsync — block-form restructure not worth it for ASP.NET Core (no SyncContext)
             await using var command = connection.CreateCommand();
 #pragma warning restore CA2007
-            // Use set_config() instead of SET to allow parameterized query.
+            // Use set_config() instead of SET to allow a parameterized value.
             // 'false' = setting persists for the entire session/connection.
             command.CommandText = "SELECT set_config('app.current_tenant', @tenantId, false)";
             var param = command.CreateParameter();
             param.ParameterName = "@tenantId";
-            param.Value = tenantId.ToString();
+            param.Value = tenantId.Value.ToString();
             command.Parameters.Add(param);
             await command.ExecuteNonQueryAsync(context.RequestAborted).ConfigureAwait(false);
 
-            logger.LogDebug("Tenant context set to {TenantId}", tenantId);
+            logger.LogDebug("Tenant context set to {TenantId}", tenantId.Value);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to set tenant context for {TenantId}", tenantId);
+            logger.LogError(ex, "Failed to set tenant context for {TenantId}", tenantId.Value);
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             await context.Response.WriteAsJsonAsync(new { error = "Failed to establish tenant context." }).ConfigureAwait(false);
             return;

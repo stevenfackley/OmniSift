@@ -6,6 +6,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.SemanticKernel;
@@ -20,6 +21,7 @@ using OmniSift.Shared.DTOs;
 namespace OmniSift.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 [EnableRateLimiting("per-tenant")]
 public sealed class AgentController(
