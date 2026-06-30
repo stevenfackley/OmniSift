@@ -28,8 +28,6 @@ on:
         default: "production"
         type: choice
         options: [production]
-  push:
-    branches: [main]
 
 concurrency:
   group: deploy-${{ github.ref }}
