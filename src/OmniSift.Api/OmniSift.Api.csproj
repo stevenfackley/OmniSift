@@ -30,7 +30,7 @@
     <PackageReference Include="MimeKit" Version="4.17.0" />
 
     <!-- Auth -->
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
 
     <!-- PDF Generation -->
@@ -40,7 +40,7 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
 
     <!-- HTTP Resilience (retry, timeout, circuit breaker via Polly) -->
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.7.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.8.0" />
 
     <!-- Serilog structured logging -->
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
