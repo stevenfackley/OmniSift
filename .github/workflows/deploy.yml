@@ -106,18 +106,35 @@ jobs:
   #
   # This job no-ops gracefully when DEPLOY_HOST is not set, so the workflow
   # can be merged and the build-push job exercised before infra is provisioned.
+  #
+  # NOTE: the "not ready yet" check can't live in this job's own `if:` —
+  # referencing the `secrets` context in a job-level `if:` alongside this
+  # job's `environment:` block is invalid and fails the entire workflow run
+  # before any job (including build-push) is created. See PR #50/#55 history:
+  # that's what caused main to go permanently red until the push trigger was
+  # pulled. Check it in a step instead, where `secrets` is always valid.
   # ────────────────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy to production
     runs-on: ubuntu-latest
     needs: build-push
-    if: ${{ secrets.DEPLOY_HOST != '' }}   # skip entirely when infra not ready
 
     environment:
       name: production
 
     steps:
+      - name: Check deploy target is configured
+        id: check
+        run: |
+          if [ -z "${{ secrets.DEPLOY_HOST }}" ]; then
+            echo "DEPLOY_HOST not set — infra not provisioned yet, skipping deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy via SSH
+        if: steps.check.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.2.5
         with:
           host:     ${{ secrets.DEPLOY_HOST }}
