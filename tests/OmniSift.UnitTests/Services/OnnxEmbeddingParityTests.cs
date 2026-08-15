@@ -91,6 +91,9 @@ public sealed class OnnxEmbeddingParityTests
         if (references is null)
             return; // fixture absent — skip rather than fail
 
+        // NOTE: models/ is gitignored, so on CI this returns null and the parity
+        // gate reports green without ever running. Run
+        // scripts/fetch-embedding-model.ps1 locally to actually exercise it.
         var model = LocateModel();
         if (model is null)
             return; // model binary absent — skip rather than fail
