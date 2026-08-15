@@ -209,6 +209,40 @@ dotnet ef database update --project src/OmniSift.Api
 
 ---
 
+## Embedding model (ONNX)
+
+The API embeds text locally with **bge-small-en-v1.5** (384-dim, CLS pooling) — no
+OpenAI calls, no per-token cost. `appsettings.json` ships `Embedding:Provider=Onnx`
+and `Program.cs` resolves the embedding service during startup, so a missing model
+is a **startup crash**, not a degraded mode. That is deliberate: the alternative is
+silently falling back to a paid API.
+
+**In the image.** `src/OmniSift.Api/Dockerfile` has a `model-fetch` stage that
+downloads `model.onnx` + `vocab.txt` from HuggingFace at build time, pinned to
+immutable commit revisions and verified with `sha256sum`. The files land at
+`/app/models/bge-small-en-v1.5/`, which is where the ContentRoot-relative
+`Embedding:ModelPath` resolves. Nothing else puts the model in the image —
+`models/` is gitignored (~127 MB), so it is never in the build context.
+
+> If you rewrite the API Dockerfile, keep the `model-fetch` stage and its `COPY`.
+> Dropping them produces an image that builds clean, passes every test, and then
+> crash-loops on boot with `FileNotFoundException`. This happened once already;
+> `DockerModelPackagingTests` now fails the build if the stage goes missing or the
+> downloads lose their revision pin / checksums.
+
+**Locally**, outside Docker, fetch the model once per machine:
+
+```powershell
+pwsh scripts/fetch-embedding-model.ps1
+```
+
+**Switching back to OpenAI is not a config flip.** `document_chunks.embedding` is
+`vector(384)`; `text-embedding-3-large` emits 3072 dims. Startup refuses the
+mismatch rather than letting the first insert fail — changing providers requires an
+EF migration for the column first.
+
+---
+
 ## Hosted demo — pending infra
 
 A live demo at a public URL is planned but deferred pending infrastructure provisioning (server, domain, TLS, secrets management). Once infra is ready:
